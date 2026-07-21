@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Env / secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Derived data extracts (generating script is the source of record — see LEGAL.md)
+data/derived/
+data/extracts/
+*.parquet
+*.feather
+
+# Editor
+.vscode/
+.idea/
