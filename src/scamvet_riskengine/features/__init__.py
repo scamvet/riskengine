@@ -5,6 +5,12 @@ no randomness. Anything requiring enrichment lives in a separate module so
 that the offline path can never silently depend on it.
 """
 
+from scamvet_riskengine.features.featurize import (
+    FeaturizerError,
+    FeaturizeReport,
+    LexicalFeaturizer,
+    extract_frame,
+)
 from scamvet_riskengine.features.spec_loader import (
     SpecViolation,
     load_spec,
@@ -20,6 +26,10 @@ from scamvet_riskengine.features.url import (
 
 __all__ = [
     "BRAND_DISTANCE_CAP",
+    "FeaturizeReport",
+    "FeaturizerError",
+    "LexicalFeaturizer",
+    "extract_frame",
     "FEATURE_SPEC_VERSION",
     "SpecViolation",
     "extract",
