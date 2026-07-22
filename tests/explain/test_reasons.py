@@ -215,6 +215,8 @@ def test_reason_serialises() -> None:
         magnitude=0.4123,
         evidence=None,
         severity="high",
+        observed=1.0,
+        evidence_kind="flag",
     ).as_dict()
     assert payload["magnitude"] == 0.4123
     assert set(payload) == {
@@ -224,4 +226,52 @@ def test_reason_serialises() -> None:
         "magnitude",
         "evidence",
         "severity",
+        "observed",
+        "evidence_kind",
+        "asserted_when",
     }
+
+
+# --------------------------------------------------------------------------
+# Absent-form rendering
+# --------------------------------------------------------------------------
+
+
+def test_an_unset_flag_renders_its_absent_form(fitted) -> None:
+    """A flag contributing negatively means its absence lowered risk.
+
+    Rendering the positive phrasing would state something untrue about the
+    address - telling a user "the connection is not encrypted" about an https
+    URL. Found by inspecting real output before this reached anyone.
+    """
+    _, X, names, _ = fitted
+    row = X[0].copy()
+    row[names.index("scheme_is_https")] = 1.0
+    values = np.zeros(len(names))
+    values[names.index("scheme_is_https")] = -2.0
+    reason = build_reasons(values, row, names)[0]
+    assert reason.template_key == "no_https"
+    assert reason.direction == "decreases"
+    assert render_english(reason) == "The connection is encrypted."
+
+
+def test_a_set_flag_renders_its_positive_form(fitted) -> None:
+    _, X, names, _ = fitted
+    row = X[0].copy()
+    row[names.index("scheme_is_https")] = 0.0
+    values = np.zeros(len(names))
+    values[names.index("scheme_is_https")] = 2.0
+    reason = build_reasons(values, row, names)[0]
+    assert render_english(reason) == "The connection is not encrypted."
+
+
+def test_every_flag_template_has_an_absent_form() -> None:
+    """Any template reachable from a flag must be renderable both ways."""
+    templates = load_templates()
+    flag_keys = {
+        entry["template_key"]
+        for entry in templates["features"].values()
+        if entry["evidence_kind"] == "flag"
+    }
+    missing = [k for k in flag_keys if "en_absent" not in templates["templates"][k]]
+    assert missing == [], f"flag templates without an absent reading: {missing}"

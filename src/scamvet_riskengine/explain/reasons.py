@@ -62,6 +62,12 @@ class Reason:
         magnitude: share of the prediction's total absolute attribution, 0-1.
         evidence: human-readable observed value, or None where there is none.
         severity: template severity hint, for ordering and emphasis.
+        observed: the raw feature value that drove this reason. Needed because
+            a flag contributing negatively means its *absence* lowered risk,
+            and rendering the positive phrasing would then assert something
+            untrue about the address.
+        evidence_kind: how ``observed`` should be read.
+        asserted_when: the flag value the template's main phrasing describes.
     """
 
     feature_id: str
@@ -70,6 +76,9 @@ class Reason:
     magnitude: float
     evidence: str | None
     severity: str
+    observed: float
+    evidence_kind: str
+    asserted_when: float = 1.0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -79,6 +88,9 @@ class Reason:
             "magnitude": round(self.magnitude, 4),
             "evidence": self.evidence,
             "severity": self.severity,
+            "observed": self.observed,
+            "evidence_kind": self.evidence_kind,
+            "asserted_when": self.asserted_when,
         }
 
 
@@ -118,6 +130,17 @@ def _resolve(feature: str, templates: dict[str, Any]) -> tuple[str, str, str] | 
     if entry is None:
         return None
     return feature, entry["template_key"], entry["evidence_kind"]
+
+
+def asserted_when(feature: str) -> float:
+    """Which raw flag value the template's main phrasing describes.
+
+    Defaults to 1. Three features invert it - ``scheme_is_https``,
+    ``had_scheme`` and ``parse_ok`` - because for those the value 1 is the safe
+    state and the template describes the value 0.
+    """
+    entry = load_templates()["features"].get(feature, {})
+    return float(entry.get("asserted_when", 1))
 
 
 def unmapped_features(feature_names: list[str]) -> list[str]:
@@ -198,6 +221,9 @@ def build_reasons(
                     bucket["kind"], bucket["evidence_value"], bucket["evidence_feature"]
                 ),
                 severity=template.get("severity", "low"),
+                observed=float(bucket["evidence_value"]),
+                evidence_kind=bucket["kind"],
+                asserted_when=asserted_when(bucket["evidence_feature"]),
             )
         )
 
@@ -222,6 +248,9 @@ def render_english(reason: Reason) -> str:
     Core owns production copy in English and Hindi; this exists so the contract
     is demonstrably renderable without depending on Core.
     """
-    templates = load_templates()
-    text = templates["templates"][reason.template_key]["en"]
+    template = load_templates()["templates"][reason.template_key]
+    text = template["en"]
+    contradicted = reason.observed != reason.asserted_when
+    if reason.evidence_kind == "flag" and contradicted and "en_absent" in template:
+        text = template["en_absent"]
     return f"{text} ({reason.evidence})" if reason.evidence else text
