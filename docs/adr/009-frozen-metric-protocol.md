@@ -99,3 +99,75 @@ for everything scores extremely well and detects nothing.
 
 **Choose the metric per experiment.** Rejected. That is the failure this ADR
 exists to prevent.
+
+---
+
+## Amendment — 2026-07-23: seed variance and the separation rule
+
+**Status:** Accepted. Extends the original decision; does not supersede it.
+
+### What happened
+
+A single-seed sweep on the real corpus showed a 400-tree LightGBM reaching
+0.8511 phishing recall at FPR 5% and a 100-tree model reaching 0.8658. This was
+read as evidence that the larger configuration overfits and the smaller one is
+strictly better, and it was nearly written into the model card and the default
+config on that basis.
+
+Repeating across four seeds:
+
+| config | s42 | s1 | s7 | s13 | mean | spread |
+|---|---|---|---|---|---|---|
+| 400 x 8 | 0.8511 | 0.8648 | 0.8597 | 0.8606 | 0.8591 | 0.0137 |
+| 200 x 8 | 0.8656 | 0.8629 | 0.8633 | 0.8654 | 0.8643 | 0.0027 |
+| 100 x 8 | 0.8658 | 0.8689 | 0.8641 | 0.8564 | 0.8638 | 0.0125 |
+
+The gap between configurations is roughly 0.005. The seed spread within a
+single configuration is roughly 0.013 — nearly three times larger. Seed 42
+happened to be 400 x 8's worst draw. There is no overfitting result; there is
+a fluctuation that was about to be published as a finding.
+
+This is the failure the original ADR exists to prevent, arriving by a route it
+did not anticipate. The ADR fixed *which* metric is reported so the choice
+could not be made after seeing results. It said nothing about how many times a
+metric is measured, which left the same freedom open in a different dimension.
+
+### Decision
+
+**1. Reported metrics are means with their observed range over at least three
+seeds.** A bare point estimate is not publishable. This applies to every
+benchmark table, model card, README figure and Canonical Numbers entry.
+`scamvet_riskengine.eval.aggregate` computes it; `scripts/benchmark.py`
+refuses fewer than two seeds.
+
+**2. A difference is a finding only if it exceeds the seed spread.**
+Formally, `separates(a, b)` holds when `|mean(a) - mean(b)|` is greater than
+`max(spread(a), spread(b))`. Configuration and model-family choices must cite
+it. The benchmark prints the pairwise verdict so the claim cannot be made
+casually.
+
+**3. Choices that do not separate are decided on other grounds, stated as
+such.** `BoostedConfig.n_estimators` is 100 rather than 400 because at 400 the
+ONNX export is 877 KB — over the 500 KB committed-artifact cap, which would
+force a separate smaller model for the offline path — while at 100 it is
+217 KB and one model serves both paths. That is a size decision. The docstring
+says so, so that nobody later reconstructs the phantom quality argument.
+
+### Consequences
+
+- Benchmarks cost three times the compute. On this corpus that is a few
+  minutes, which is not a reason to prefer a number we cannot support.
+- Some previously interesting-looking differences will dissolve. That is the
+  point.
+- The imbalance study inherits this: "resampling improved recall" needs
+  multi-seed evidence or it is not a result.
+- `MetricSpread.spread` is the observed range rather than a standard
+  deviation. Chosen for legibility at three to five seeds, where a standard
+  deviation over so few observations is itself noisy and invites false
+  precision. If seed counts grow, revisit.
+
+### What this does not claim
+
+Seed spread is not a confidence interval and no significance test is implied.
+It is a floor: differences below the observed variation are not evidence.
+Differences above it are worth investigating, not proven.

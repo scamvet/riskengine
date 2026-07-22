@@ -33,9 +33,19 @@ class BoostedConfig:
     Deliberately modest and identical in spirit across both libraries, so the
     benchmark compares model families rather than tuning effort. Optuna search
     comes later, on top of a protocol that is already fixed.
+
+    ``n_estimators`` is 100 rather than 400 **for size, not quality**. At 400
+    the ONNX export is 877 KB, over the 500 KB committed-artifact cap, forcing
+    a separate smaller model for the offline path; at 100 it is 217 KB and one
+    model serves both paths. Measured across four seeds the two configurations
+    do not separate - the gap in mean phishing recall is roughly 0.0005 while
+    the seed spread is roughly 0.013 - so the smaller model is free, not
+    better. An earlier reading of a single seed suggested 400 was overfitting;
+    it was not, and that claim should not be revived without multi-seed
+    evidence (ADR-009, amendment of 2026-07-23).
     """
 
-    n_estimators: int = 400
+    n_estimators: int = 100
     learning_rate: float = 0.1
     max_depth: int = 8
     subsample: float = 0.9
