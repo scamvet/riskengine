@@ -1,0 +1,169 @@
+{
+  "version": "1",
+  "updated": "2026-07-23",
+  "note": "Maps feature columns to stable template keys. RiskEngine emits keys and evidence; Core renders the user-facing prose in English and Hindi from the same keys. A feature absent from this table cannot become a reason, which is deliberate: it makes it impossible for a raw column name like 'num_hyphens_host' to reach a user. Adding a feature requires adding its template here in the same change. The 'en' strings are a reference rendering so the package is usable standalone; Core's phrase table is authoritative for production copy.",
+  "groups": {
+    "tld_reputation": {
+      "prefix": "tld_is_",
+      "template_key": "tld_reputation",
+      "evidence_kind": "category"
+    }
+  },
+  "features": {
+    "brand_domain_mismatch": {"template_key": "brand_impersonation", "evidence_kind": "flag"},
+    "brand_in_host": {"template_key": "brand_mention", "evidence_kind": "flag"},
+    "brand_min_distance": {"template_key": "brand_lookalike", "evidence_kind": "distance"},
+    "suspicious_tld": {"template_key": "suspicious_tld", "evidence_kind": "flag"},
+    "is_shortener": {"template_key": "url_shortener", "evidence_kind": "flag"},
+    "host_is_ip": {"template_key": "ip_address_host", "evidence_kind": "flag"},
+    "host_is_ipv6": {"template_key": "ip_address_host", "evidence_kind": "flag"},
+    "has_punycode": {"template_key": "punycode_host", "evidence_kind": "flag"},
+    "has_at_symbol": {"template_key": "at_symbol_obfuscation", "evidence_kind": "flag"},
+    "has_port": {"template_key": "explicit_port", "evidence_kind": "flag"},
+    "has_double_slash_in_path": {"template_key": "malformed_path", "evidence_kind": "flag"},
+    "scheme_is_https": {"template_key": "no_https", "evidence_kind": "flag"},
+    "had_scheme": {"template_key": "missing_scheme", "evidence_kind": "flag"},
+    "parse_ok": {"template_key": "unparseable", "evidence_kind": "flag"},
+    "num_hyphens_host": {"template_key": "hyphenated_domain", "evidence_kind": "count"},
+    "num_subdomains": {"template_key": "many_subdomains", "evidence_kind": "count"},
+    "num_dots_host": {"template_key": "many_subdomains", "evidence_kind": "count"},
+    "num_path_segments": {"template_key": "deep_path", "evidence_kind": "count"},
+    "num_query_params": {"template_key": "many_parameters", "evidence_kind": "count"},
+    "num_encoded_chars": {"template_key": "encoded_characters", "evidence_kind": "count"},
+    "keyword_hits_auth": {"template_key": "login_keywords", "evidence_kind": "count"},
+    "keyword_hits_payment": {"template_key": "payment_keywords", "evidence_kind": "count"},
+    "keyword_hits_urgency": {"template_key": "urgency_keywords", "evidence_kind": "count"},
+    "keyword_hits_reward": {"template_key": "reward_keywords", "evidence_kind": "count"},
+    "keyword_hits_total": {"template_key": "keyword_density", "evidence_kind": "count"},
+    "host_entropy": {"template_key": "random_looking_host", "evidence_kind": "score"},
+    "path_entropy": {"template_key": "random_looking_path", "evidence_kind": "score"},
+    "host_digit_ratio": {"template_key": "digits_in_host", "evidence_kind": "ratio"},
+    "url_digit_ratio": {"template_key": "digits_in_address", "evidence_kind": "ratio"},
+    "url_length": {"template_key": "long_address", "evidence_kind": "length"},
+    "host_length": {"template_key": "long_domain", "evidence_kind": "length"},
+    "path_length": {"template_key": "long_path", "evidence_kind": "length"},
+    "query_length": {"template_key": "long_query", "evidence_kind": "length"},
+    "fragment_length": {"template_key": "long_fragment", "evidence_kind": "length"},
+    "longest_host_label_len": {"template_key": "long_domain", "evidence_kind": "length"},
+    "tld_length": {"template_key": "tld_reputation", "evidence_kind": "length"}
+  },
+  "templates": {
+    "brand_impersonation": {
+      "en": "The address mentions a well-known brand but is not that brand's real website.",
+      "severity": "high"
+    },
+    "brand_mention": {
+      "en": "The address contains the name of a well-known brand.",
+      "severity": "medium"
+    },
+    "brand_lookalike": {
+      "en": "The domain is spelled almost like a well-known brand's domain.",
+      "severity": "high"
+    },
+    "suspicious_tld": {
+      "en": "The address ends in a domain extension often used by scam sites.",
+      "severity": "medium"
+    },
+    "tld_reputation": {
+      "en": "The domain extension is unusual for a legitimate site of this kind.",
+      "severity": "low"
+    },
+    "url_shortener": {
+      "en": "This is a shortened link, so the real destination is hidden until you open it.",
+      "severity": "medium"
+    },
+    "ip_address_host": {
+      "en": "The address points at a raw IP number instead of a domain name.",
+      "severity": "high"
+    },
+    "punycode_host": {
+      "en": "The domain uses special characters that can be made to look like ordinary letters.",
+      "severity": "high"
+    },
+    "at_symbol_obfuscation": {
+      "en": "The address contains an @ symbol, which can hide the real destination.",
+      "severity": "high"
+    },
+    "explicit_port": {
+      "en": "The address specifies an unusual network port.",
+      "severity": "low"
+    },
+    "malformed_path": {
+      "en": "The address contains a doubled slash, sometimes used to redirect elsewhere.",
+      "severity": "low"
+    },
+    "no_https": {
+      "en": "The connection is not encrypted.",
+      "severity": "medium"
+    },
+    "missing_scheme": {
+      "en": "The address was written without http or https.",
+      "severity": "low"
+    },
+    "unparseable": {
+      "en": "This does not look like a valid web address.",
+      "severity": "low"
+    },
+    "hyphenated_domain": {
+      "en": "The domain contains several hyphens, common in imitation addresses.",
+      "severity": "medium"
+    },
+    "many_subdomains": {
+      "en": "The address has many parts before the real domain, which can hide it.",
+      "severity": "medium"
+    },
+    "deep_path": {
+      "en": "The address has an unusually deep folder path.",
+      "severity": "low"
+    },
+    "many_parameters": {
+      "en": "The address carries an unusual number of parameters.",
+      "severity": "low"
+    },
+    "encoded_characters": {
+      "en": "Parts of the address are encoded, which can disguise its content.",
+      "severity": "medium"
+    },
+    "login_keywords": {
+      "en": "The address contains sign-in or verification words.",
+      "severity": "medium"
+    },
+    "payment_keywords": {
+      "en": "The address contains payment or banking words.",
+      "severity": "medium"
+    },
+    "urgency_keywords": {
+      "en": "The address contains urgency words such as blocked or expiring.",
+      "severity": "medium"
+    },
+    "reward_keywords": {
+      "en": "The address contains prize or reward words.",
+      "severity": "medium"
+    },
+    "keyword_density": {
+      "en": "The address is packed with words typical of scam pages.",
+      "severity": "medium"
+    },
+    "random_looking_host": {
+      "en": "The domain looks randomly generated rather than chosen.",
+      "severity": "medium"
+    },
+    "random_looking_path": {
+      "en": "The path looks randomly generated.",
+      "severity": "low"
+    },
+    "digits_in_host": {
+      "en": "The domain contains an unusual number of digits.",
+      "severity": "low"
+    },
+    "digits_in_address": {
+      "en": "The address contains an unusual number of digits.",
+      "severity": "low"
+    },
+    "long_address": {"en": "The address is unusually long.", "severity": "low"},
+    "long_domain": {"en": "The domain name is unusually long.", "severity": "low"},
+    "long_path": {"en": "The path after the domain is unusually long.", "severity": "low"},
+    "long_query": {"en": "The address carries an unusually long query string.", "severity": "low"},
+    "long_fragment": {"en": "The address carries an unusually long fragment.", "severity": "low"}
+  }
+}
