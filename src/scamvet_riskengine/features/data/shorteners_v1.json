@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "updated": "2026-07-22",
+  "note": "Registered domains (eTLD+1) of URL shortening services. A shortener hit means the true destination is unknown from the URL alone, so the Evidence agent must unshorten before a verdict. Any change requires a feature-spec version bump.",
+  "domains": [
+    "bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "is.gd", "buff.ly",
+    "adf.ly", "bit.do", "cutt.ly", "shorturl.at", "rb.gy", "rebrand.ly",
+    "t.ly", "short.io", "shrtco.de", "s.id", "tiny.cc", "soo.gd", "clck.ru",
+    "v.gd", "trib.al", "lnkd.in", "db.tt", "qr.ae", "j.mp", "mcaf.ee",
+    "su.pr", "twurl.nl", "snipurl.com", "shorte.st", "linktr.ee", "wa.link",
+    "chilp.it", "urlz.fr", "1url.com", "u.to", "x.co", "prettylinkpro.com",
+    "zpr.io", "shorturl.com", "smarturl.it", "gg.gg", "bl.ink", "shrturi.com"
+  ]
+}

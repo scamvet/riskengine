@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "updated": "2026-07-22",
+  "note": "Tokens matched case-insensitively as substrings of the lowercased host+path+query. Tuned for Indian consumer scams. Adding or removing a token changes feature values and therefore requires a feature-spec version bump.",
+  "categories": {
+    "auth": [
+      "login", "signin", "sign-in", "logon", "verify", "verification",
+      "authenticate", "account", "password", "passwd", "credential",
+      "secure", "security", "kyc", "otp", "twofactor", "2fa", "update",
+      "confirm", "unlock", "reactivate", "aadhaar", "aadhar", "pancard"
+    ],
+    "payment": [
+      "upi", "payment", "pay", "paynow", "wallet", "netbanking",
+      "banking", "bank", "transaction", "transfer", "refund", "recharge",
+      "billing", "invoice", "creditcard", "debitcard", "cvv", "imps",
+      "neft", "rtgs", "cashback", "checkout"
+    ],
+    "urgency": [
+      "urgent", "immediate", "immediately", "expire", "expired", "expiry",
+      "suspend", "suspended", "blocked", "block", "deactivate", "alert",
+      "warning", "limited", "lastchance", "actionrequired", "final"
+    ],
+    "reward": [
+      "prize", "winner", "won", "lottery", "lucky", "gift", "giftcard",
+      "freegift", "bonus", "reward", "claim", "offer", "discount",
+      "scratch", "jackpot", "congratulations"
+    ]
+  },
+  "suspicious_tlds": [
+    "xyz", "top", "click", "link", "work", "gq", "cf", "tk", "ml", "ga",
+    "buzz", "loan", "download", "review", "country", "kim", "men", "date",
+    "racing", "stream", "bid", "party", "trade", "webcam", "cam", "rest",
+    "quest", "cyou", "sbs", "icu", "fit", "monster", "shop", "online",
+    "site", "website", "space", "live", "store"
+  ]
+}
