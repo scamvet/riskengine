@@ -33,6 +33,14 @@ class GlobalImportance:
     feature_names: tuple[str, ...]
     mean_abs: tuple[float, ...]
     n_samples: int
+    #: Mean absolute attribution restricted to rows where the feature is
+    #: non-zero, and how many such rows there were. Frequency-weighted
+    #: importance buries rare features: brand_domain_mismatch fires on 0.44%
+    #: of rows and ranks 56th overall while being one of the sharpest signals
+    #: when it does fire. Conditional importance is what says whether a rare
+    #: feature works.
+    mean_abs_when_active: tuple[float, ...] = ()
+    n_active: tuple[int, ...] = ()
 
     def ranked(self, top: int | None = None) -> list[tuple[str, float]]:
         pairs = sorted(
@@ -42,11 +50,38 @@ class GlobalImportance:
         )
         return pairs[:top] if top else pairs
 
+    def ranked_when_active(self, top: int | None = None) -> list[tuple[str, float, int]]:
+        """Features ranked by attribution among the rows where they are active.
+
+        The ranking that matters for rare features. Frequency-weighted
+        importance divides by every row, so a feature firing on 0.44% of the
+        corpus looks negligible even when it dominates the rows it touches.
+        """
+        triples = sorted(
+            zip(self.feature_names, self.mean_abs_when_active, self.n_active, strict=True),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        return triples[:top] if top else triples
+
     def as_dict(self) -> dict[str, Any]:
+        active = dict(
+            zip(
+                self.feature_names,
+                zip(self.mean_abs_when_active, self.n_active, strict=True),
+                strict=True,
+            )
+        )
         return {
             "n_samples": self.n_samples,
             "features": [
-                {"feature": name, "mean_abs_contribution": value} for name, value in self.ranked()
+                {
+                    "feature": name,
+                    "mean_abs_contribution": value,
+                    "mean_abs_when_active": active[name][0],
+                    "n_active": active[name][1],
+                }
+                for name, value in self.ranked()
             ],
         }
 
@@ -108,8 +143,20 @@ def global_importance(
         raise ExplainError(f"{len(feature_names)} feature names but {X.shape[1]} columns")
     sample = X[:max_samples]
     values, _ = contributions(model, sample)
+    absolute = np.abs(values)
+
+    active_means: list[float] = []
+    active_counts: list[int] = []
+    for column in range(sample.shape[1]):
+        mask = sample[:, column] != 0
+        count = int(mask.sum())
+        active_counts.append(count)
+        active_means.append(float(absolute[mask, column].mean()) if count else 0.0)
+
     return GlobalImportance(
         feature_names=tuple(feature_names),
-        mean_abs=tuple(float(v) for v in np.abs(values).mean(axis=0)),
+        mean_abs=tuple(float(v) for v in absolute.mean(axis=0)),
         n_samples=int(sample.shape[0]),
+        mean_abs_when_active=tuple(active_means),
+        n_active=tuple(active_counts),
     )

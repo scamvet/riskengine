@@ -115,7 +115,7 @@ def test_one_hot_rows_sum_to_exactly_one(train_frame: pd.DataFrame) -> None:
 def test_vocabulary_is_bounded(train_frame: pd.DataFrame) -> None:
     f = LexicalFeaturizer(max_tld_vocab=2).fit(train_frame)
     assert len(f.tld_vocabulary) == 2
-    assert len(f.feature_columns) == 36 + 2 + 2  # numeric + vocab + other + none
+    assert len(f.feature_columns) == 35 + 2 + 2  # numeric + vocab + other + none
 
 
 def test_column_order_is_deterministic(train_frame: pd.DataFrame) -> None:

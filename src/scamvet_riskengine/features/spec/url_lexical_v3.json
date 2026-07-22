@@ -1,9 +1,9 @@
 {
-  "spec_version": "url_lexical_v2",
-  "created": "2026-07-22",
+  "spec_version": "url_lexical_v3",
+  "created": "2026-07-23",
   "generator": "scamvet_riskengine.features.url:extract",
   "requires_network": false,
-  "note": "The contract for lexical URL features. Consumed by RiskEngine models, by Core's risk-scorer agent, and by ScamPulse's dbt models, which must emit columns matching these names and dtypes. Changing any field, or changing any data file under features/data/, requires a new spec_version - feature values must never drift under a fixed version. Feature values also depend on the pinned tldextract version, because public-suffix resolution determines subdomain and registered-domain boundaries.",
+  "note": "The contract for lexical URL features. Consumed by RiskEngine models, by Core's risk-scorer agent, and by ScamPulse's dbt models, which must emit columns matching these names and dtypes. Changing any field, or changing any data file under features/data/, requires a new spec_version - feature values must never drift under a fixed version. Feature values also depend on the pinned tldextract version, because public-suffix resolution determines subdomain and registered-domain boundaries. v3 removes had_scheme: it encoded corpus provenance rather than a property of the URL, and cannot carry the same meaning at inference time.",
   "data_files": [
     "data/url_keywords_v1.json",
     "data/brands_v1.json",
@@ -17,14 +17,6 @@
       "max": 1,
       "nullable": false,
       "description": "1 if the input parsed to a non-empty host, else 0 with all other fields neutral."
-    },
-    {
-      "name": "had_scheme",
-      "dtype": "int8",
-      "min": 0,
-      "max": 1,
-      "nullable": false,
-      "description": "1 if the raw input carried an explicit scheme."
     },
     {
       "name": "scheme_is_https",
@@ -307,7 +299,5 @@
       "description": "Minimum edit distance from the registered domain label to any brand token, reported only when below 4; anything at or above 4 is reported as the cap of 64. Values of 1-3 indicate typosquatting, 0 an exact token match, 64 no near match. The bound exists because larger distances carry no signal and computing them dominated extraction cost."
     }
   ],
-  "supersedes": "url_lexical_v1",
-  "superseded_by": "url_lexical_v3",
-  "superseded_reason": "had_scheme identified which upstream source file a corpus row came from (defacement 100% scheme-prefixed, benign 8%) rather than anything about the URL. It was the strongest feature by attribution at 3.3x the next, and at inference it means only how the user copied the link. Removed in v3."
+  "supersedes": "url_lexical_v2"
 }

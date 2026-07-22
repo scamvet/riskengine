@@ -186,12 +186,18 @@ def test_at_symbol_obfuscation() -> None:
 
 
 def test_scheme_is_optional() -> None:
+    """A missing scheme must not change what the URL is understood to be.
+
+    ``had_scheme`` was itself a feature until v3, when it turned out to encode
+    which upstream file a corpus row came from rather than anything about the
+    address. What remains is the requirement that parsing works either way.
+    """
     with_scheme = extract("http://example.com/a")
     without = extract("example.com/a")
     assert without["parse_ok"] == 1
-    assert without["had_scheme"] == 0
-    assert with_scheme["had_scheme"] == 1
     assert without["tld"] == with_scheme["tld"]
+    assert without["host_length"] == with_scheme["host_length"]
+    assert "had_scheme" not in without
 
 
 def test_indian_second_level_suffix_resolves() -> None:

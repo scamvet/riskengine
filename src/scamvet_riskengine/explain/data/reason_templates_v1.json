@@ -59,11 +59,6 @@
       "evidence_kind": "flag",
       "asserted_when": 0
     },
-    "had_scheme": {
-      "template_key": "missing_scheme",
-      "evidence_kind": "flag",
-      "asserted_when": 0
-    },
     "parse_ok": {
       "template_key": "unparseable",
       "evidence_kind": "flag",
@@ -220,7 +215,8 @@
     "missing_scheme": {
       "en": "The address was written without http or https.",
       "severity": "low",
-      "en_absent": "The address was written with a proper http or https prefix."
+      "en_absent": "The address was written with a proper http or https prefix.",
+      "retired": "Unused since url_lexical_v3 removed had_scheme. Kept so historical reason payloads remain renderable."
     },
     "unparseable": {
       "en": "This does not look like a valid web address.",

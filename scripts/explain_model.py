@@ -109,7 +109,16 @@ def main() -> int:
     for rank, (name, value) in enumerate(ranked[:25], start=1):
         print(f"  {rank:>2}. {name:<28} {value:.5f}")
 
+    active = importance.ranked_when_active()
+    print("\nimportance among rows where the feature is active (rare-but-sharp check)")
+    for rank, (name, value, count) in enumerate(active[:15], start=1):
+        share = count / importance.n_samples
+        print(f"  {rank:>2}. {name:<28} {value:.5f}  active in {share:>6.2%} of rows")
+
     lookup = {name: rank for rank, (name, _) in enumerate(ranked, start=1)}
+    active_lookup = {
+        name: (rank, value, count) for rank, (name, value, count) in enumerate(active, start=1)
+    }
     print("\nfeatures worth checking specifically:")
     for name in (
         "is_shortener",
@@ -120,7 +129,11 @@ def main() -> int:
         "host_is_ip",
     ):
         if name in lookup:
-            print(f"  {name:<24} rank {lookup[name]:>3} of {len(ranked)}  {dict(ranked)[name]:.5f}")
+            a_rank, a_value, a_count = active_lookup[name]
+            print(
+                f"  {name:<24} overall rank {lookup[name]:>3}  {dict(ranked)[name]:.5f}"
+                f"   | active rank {a_rank:>3}  {a_value:.5f}  n={a_count:,}"
+            )
 
     values, _ = contributions(model, X["test"])
     is_phishing = (test["type"] == "phishing").to_numpy()

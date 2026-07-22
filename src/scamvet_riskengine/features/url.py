@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 
 import tldextract
 
-FEATURE_SPEC_VERSION = "url_lexical_v2"
+FEATURE_SPEC_VERSION = "url_lexical_v3"
 
 _DATA_DIR = Path(__file__).parent / "data"
 
@@ -43,6 +43,15 @@ BRAND_DISTANCE_CAP = 64
 # this bound instead of the cap made a full-corpus build roughly ten times
 # faster. The change in reported values is why the spec moved to v2.
 BRAND_DISTANCE_USEFUL_MAX = 4
+
+# Removed in v3: had_scheme. Whether the stored string carried "http://" turned
+# out to identify which upstream file a corpus row came from - defacement rows
+# were 100% scheme-prefixed, benign rows 8% - so the model learned provenance
+# rather than phishing. It was the single strongest feature by attribution,
+# 3.3x the next. At inference the same field means only "how the user happened
+# to copy the link", which carries no information about the destination. A
+# feature that cannot mean the same thing at inference as in training does not
+# belong in the spec, so it is gone rather than zeroed.
 
 _MAX_ENTROPY = 8.0
 
@@ -232,7 +241,6 @@ def _empty_features() -> dict[str, Any]:
     """Neutral feature dict used when the input cannot be parsed at all."""
     return {
         "parse_ok": 0,
-        "had_scheme": 0,
         "scheme_is_https": 0,
         "url_length": 0,
         "host_length": 0,
@@ -305,7 +313,6 @@ def extract(url: str) -> dict[str, Any]:
         return features
 
     features["parse_ok"] = 1
-    features["had_scheme"] = had_scheme
     features["scheme_is_https"] = 1 if parts.scheme == "https" else 0
 
     path = parts.path or ""
