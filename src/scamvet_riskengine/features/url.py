@@ -316,3 +316,35 @@ def extract(url: str) -> dict[str, Any]:
 def feature_names() -> list[str]:
     """Ordered feature names produced by :func:`extract`."""
     return list(_empty_features().keys())
+
+
+def registered_domain(url: str) -> str:
+    """Return the registered domain (eTLD+1) of a URL, or "" if there is none.
+
+    Public because it is the grouping key for dataset splitting. Random
+    splitting of URLs puts ``evil.com/a`` in train and ``evil.com/b`` in test,
+    which inflates every reported metric; grouping by registered domain is the
+    fix, and the grouping must use exactly the same public-suffix resolution
+    the features use, so it lives here rather than being reimplemented.
+
+    Returns "" for IP hosts and for anything unparseable, so callers must
+    handle the empty group explicitly rather than silently pooling them.
+    """
+    if not isinstance(url, str):
+        return ""
+    raw = url.strip()
+    if not raw:
+        return ""
+    parseable = raw if _SCHEME_RE.match(raw) else "http://" + raw
+    try:
+        host = (urlsplit(parseable).hostname or "").lower()
+    except ValueError:
+        return ""
+    if not _host_is_plausible(host):
+        return ""
+    if _is_ip_host(host)[0]:
+        return ""
+    ext = _EXTRACT(host)
+    if not ext.domain or not ext.suffix:
+        return ""
+    return f"{ext.domain}.{ext.suffix}"

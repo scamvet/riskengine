@@ -16,6 +16,7 @@ classifiers = [
 
 dependencies = [
     "tldextract>=5.3,<6",
+    "pandas>=2.1,<4",
 ]
 
 [project.optional-dependencies]
