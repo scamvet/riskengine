@@ -13,6 +13,13 @@ from scamvet_riskengine.models.boosted import (
     build_lightgbm,
     build_xgboost,
 )
+from scamvet_riskengine.models.onnx_export import (
+    PARITY_TOLERANCE,
+    SIZE_CAP_BYTES,
+    ExportError,
+    ExportResult,
+    export_and_verify,
+)
 from scamvet_riskengine.models.calibration import (
     CALIBRATORS,
     CalibrationError,
@@ -23,6 +30,11 @@ from scamvet_riskengine.models.calibration import (
 
 __all__ = [
     "CALIBRATORS",
+    "PARITY_TOLERANCE",
+    "SIZE_CAP_BYTES",
+    "ExportError",
+    "ExportResult",
+    "export_and_verify",
     "BaselineConfig",
     "BoostedConfig",
     "Coefficient",
