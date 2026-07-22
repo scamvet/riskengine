@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 
 import tldextract
 
-FEATURE_SPEC_VERSION = "url_lexical_v1"
+FEATURE_SPEC_VERSION = "url_lexical_v2"
 
 _DATA_DIR = Path(__file__).parent / "data"
 
@@ -35,6 +35,14 @@ _DATA_DIR = Path(__file__).parent / "data"
 # host is a bare IP). Chosen above any realistic label length so that "no
 # comparison" sorts as maximally dissimilar rather than as a near match.
 BRAND_DISTANCE_CAP = 64
+
+# Edit distances at or above this are reported as BRAND_DISTANCE_CAP. A domain
+# four or more edits away from a brand token is not a typosquat of it, so the
+# exact value carries no signal - and computing it dominated extraction cost
+# (93% of runtime, ~37 full distance computations per URL). Pruning against
+# this bound instead of the cap made a full-corpus build roughly ten times
+# faster. The change in reported values is why the spec moved to v2.
+BRAND_DISTANCE_USEFUL_MAX = 4
 
 _MAX_ENTROPY = 8.0
 
@@ -71,6 +79,27 @@ def _brands() -> dict[str, Any]:
 @lru_cache(maxsize=1)
 def _shorteners() -> frozenset[str]:
     return frozenset(_load("shorteners_v1.json")["domains"])
+
+
+@lru_cache(maxsize=1)
+def _suspicious_tlds() -> frozenset[str]:
+    return frozenset(_keywords()["suspicious_tlds"])
+
+
+@lru_cache(maxsize=1)
+def _brand_index() -> tuple[tuple[str, frozenset[str]], ...]:
+    """Flatten brands to (token, official_domains) pairs once.
+
+    The per-URL path walked a nested structure and rebuilt the same sets on
+    every call. Flattening at import turns that into a tight loop over a
+    tuple.
+    """
+    flat: list[tuple[str, frozenset[str]]] = []
+    for brand in _brands()["brands"]:
+        official = frozenset(brand["official_domains"])
+        for token in brand["tokens"]:
+            flat.append((token, official))
+    return tuple(flat)
 
 
 def _shannon_entropy(text: str) -> float:
@@ -152,6 +181,51 @@ def _host_is_plausible(host: str) -> bool:
     if any(ch in _INVALID_HOST_CHARS for ch in host):
         return False
     return any(ch.isalnum() for ch in host)
+
+
+@lru_cache(maxsize=262_144)
+def _host_analysis(host: str) -> tuple[int, int, int, str, str, int, int, int]:
+    """Everything derivable from the host alone, cached by host.
+
+    Returns:
+        (is_ip, is_ipv6, n_subdomain_labels, suffix, registered_domain,
+         brand_in_host, brand_domain_mismatch, brand_min_distance)
+
+    Cached because a corpus of URLs contains far fewer distinct hosts than
+    URLs, and public-suffix resolution plus the brand scan are by a wide
+    margin the most expensive part of extraction. Recomputing them per path
+    on the same host is pure waste.
+    """
+    is_ip, is_ipv6 = _is_ip_host(host)
+    if is_ip:
+        return (1, is_ipv6, 0, "", "", 0, 0, BRAND_DISTANCE_CAP)
+
+    ext = _EXTRACT(host)
+    domain_label = ext.domain
+    suffix = ext.suffix
+    registered = f"{domain_label}.{suffix}" if domain_label and suffix else ""
+    n_subdomains = len([s for s in ext.subdomain.split(".") if s])
+
+    brand_in_host = 0
+    mismatch = 0
+    best = BRAND_DISTANCE_USEFUL_MAX
+    label_len = len(domain_label)
+    for token, official in _brand_index():
+        if token in host:
+            brand_in_host = 1
+            if registered and registered not in official:
+                mismatch = 1
+        if domain_label:
+            # Edit distance is at least the length difference, so a token that
+            # far from the label cannot beat the current best. Exact pruning.
+            if abs(label_len - len(token)) >= best:
+                continue
+            distance = _levenshtein(domain_label, token, cap=best)
+            if distance < best:
+                best = distance
+
+    reported = best if best < BRAND_DISTANCE_USEFUL_MAX else BRAND_DISTANCE_CAP
+    return (0, 0, n_subdomains, suffix, registered, brand_in_host, mismatch, reported)
 
 
 def _empty_features() -> dict[str, Any]:
@@ -250,9 +324,9 @@ def extract(url: str) -> dict[str, Any]:
     features["num_dots_host"] = host.count(".")
     features["num_hyphens_host"] = host.count("-")
 
-    is_ip, is_ipv6 = _is_ip_host(host)
-    features["host_is_ip"] = is_ip
-    features["host_is_ipv6"] = is_ipv6
+    analysis = _host_analysis(host)
+    features["host_is_ip"] = analysis[0]
+    features["host_is_ipv6"] = analysis[1]
     features["has_port"] = 1 if port is not None else 0
     features["has_punycode"] = 1 if "xn--" in host else 0
     features["has_at_symbol"] = 1 if "@" in parts.netloc else 0
@@ -267,22 +341,12 @@ def extract(url: str) -> dict[str, Any]:
     labels = [label for label in host.split(".") if label]
     features["longest_host_label_len"] = max((len(x) for x in labels), default=0)
 
-    if is_ip:
-        registered = ""
-        subdomain = ""
-        suffix = ""
-        domain_label = ""
-    else:
-        ext = _EXTRACT(host)
-        subdomain = ext.subdomain
-        suffix = ext.suffix
-        domain_label = ext.domain
-        registered = f"{domain_label}.{suffix}" if domain_label and suffix else ""
+    (_, _, n_subdomains, suffix, registered, brand_in_host, mismatch, min_distance) = analysis
 
-    features["num_subdomains"] = len([s for s in subdomain.split(".") if s]) if subdomain else 0
+    features["num_subdomains"] = n_subdomains
     features["tld"] = suffix.rsplit(".", 1)[-1] if suffix else ""
     features["tld_length"] = len(features["tld"])
-    features["suspicious_tld"] = 1 if features["tld"] in set(_keywords()["suspicious_tlds"]) else 0
+    features["suspicious_tld"] = 1 if features["tld"] in _suspicious_tlds() else 0
     features["is_shortener"] = 1 if registered in _shorteners() else 0
 
     haystack = f"{host}{path}{query}".lower()
@@ -293,19 +357,6 @@ def extract(url: str) -> dict[str, Any]:
         total += hits
     features["keyword_hits_total"] = total
 
-    brand_in_host = 0
-    mismatch = 0
-    min_distance = BRAND_DISTANCE_CAP
-    if not is_ip:
-        for brand in _brands()["brands"]:
-            official = set(brand["official_domains"])
-            for token in brand["tokens"]:
-                if token in host:
-                    brand_in_host = 1
-                    if registered and registered not in official:
-                        mismatch = 1
-                if domain_label:
-                    min_distance = min(min_distance, _levenshtein(domain_label, token))
     features["brand_in_host"] = brand_in_host
     features["brand_domain_mismatch"] = mismatch
     features["brand_min_distance"] = min_distance

@@ -1,5 +1,5 @@
 {
-  "spec_version": "url_lexical_v1",
+  "spec_version": "url_lexical_v2",
   "created": "2026-07-22",
   "generator": "scamvet_riskengine.features.url:extract",
   "requires_network": false,
@@ -304,9 +304,8 @@
       "min": 0,
       "max": 64,
       "nullable": false,
-      "description": "Minimum edit distance from the registered domain label to any brand token, capped at 64. Low non-zero values indicate typosquatting. 64 means no comparison was possible."
+      "description": "Minimum edit distance from the registered domain label to any brand token, reported only when below 4; anything at or above 4 is reported as the cap of 64. Values of 1-3 indicate typosquatting, 0 an exact token match, 64 no near match. The bound exists because larger distances carry no signal and computing them dominated extraction cost."
     }
   ],
-  "superseded_by": "url_lexical_v2",
-  "superseded_reason": "brand_min_distance reported exact edit distances up to 64. Distances of 4 or more carry no typosquat signal and computing them dominated extraction cost. v2 reports the cap for anything at or above 4. No model was ever trained under v1."
+  "supersedes": "url_lexical_v1"
 }
