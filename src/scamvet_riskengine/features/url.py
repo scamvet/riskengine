@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 
 import tldextract
 
-FEATURE_SPEC_VERSION = "url_lexical_v4"
+FEATURE_SPEC_VERSION = "url_lexical_v5"
 
 _DATA_DIR = Path(__file__).parent / "data"
 
@@ -44,6 +44,22 @@ BRAND_DISTANCE_CAP = 64
 # faster. The change in reported values is why the spec moved to v2.
 BRAND_DISTANCE_USEFUL_MAX = 4
 
+# Changed in v5: url_length and url_digit_ratio are measured on a canonical
+# form with the scheme stripped, not on the raw input.
+#
+# This was the same corpus-provenance bug as v3 and v4, hiding where feature
+# removal could not reach it. 72% of corpus rows carry no scheme, so the model
+# learned url_length - its top feature by attribution - on scheme-less strings,
+# while every real user pastes a URL with one. Eight extra characters on a
+# median length of 45 moved the score enormously: bankofbaroda.com/ scored
+# 0.018 and https://bankofbaroda.com/ scored 0.985, the same site either side
+# of the red threshold. 36 of 55 domains our own brand list asserts are
+# legitimate were flagged, against 0.5% of comparable corpus rows.
+#
+# Any feature computed over the raw input string inherits how that string
+# happened to be stored. Canonicalising first is the general fix; the invariant
+# is that extract(u) == extract("https://" + u), and it is a property test.
+#
 # Removed in v4: scheme_is_https. Only 2.4% of the corpus carries an explicit
 # https prefix, and those rows are 87.5% malicious - benign rows are 0.46%
 # https, defacement 0.00%. That is a storage convention of the upstream files,
@@ -326,7 +342,17 @@ def extract(url: str) -> dict[str, Any]:
     query = parts.query or ""
     fragment = parts.fragment or ""
 
-    features["url_length"] = len(raw)
+    # Canonical form: what the address *is*, independent of how it was written
+    # down. Everything measured over the whole URL uses this rather than `raw`.
+    canonical = f"{host}{path}"
+    if query:
+        canonical += f"?{query}"
+    if fragment:
+        canonical += f"#{fragment}"
+    if parts.port is not None:
+        canonical = f"{host}:{parts.port}{canonical[len(host) :]}"
+
+    features["url_length"] = len(canonical)
     features["host_length"] = len(host)
     features["path_length"] = len(path)
     features["query_length"] = len(query)
@@ -345,10 +371,10 @@ def extract(url: str) -> dict[str, Any]:
     features["has_punycode"] = 1 if "xn--" in host else 0
     features["has_at_symbol"] = 1 if "@" in parts.netloc else 0
     features["has_double_slash_in_path"] = 1 if "//" in path else 0
-    features["num_encoded_chars"] = len(_PCT_RE.findall(raw))
+    features["num_encoded_chars"] = len(_PCT_RE.findall(canonical))
 
     features["host_digit_ratio"] = _digit_ratio(host)
-    features["url_digit_ratio"] = _digit_ratio(raw)
+    features["url_digit_ratio"] = _digit_ratio(canonical)
     features["host_entropy"] = _shannon_entropy(host)
     features["path_entropy"] = _shannon_entropy(path)
 

@@ -240,6 +240,7 @@ def test_scoring_survives_without_the_native_model(tmp_path: Path) -> None:
     """Reasons are best-effort; bands are not."""
     target = _publish(tmp_path, "0.1.0")
     (target / "model.json").unlink()
+    (target / "model.json.gz").unlink(missing_ok=True)
     result = load("url-scorer-lexical", root=tmp_path).score("https://example.com/")
     assert result.band in {"green", "amber", "red"}
     assert result.reasons == ()
@@ -257,3 +258,23 @@ def test_use_case_changes_the_band(registry: Path) -> None:
     assert strict.probability == pytest.approx(lenient.probability)
     order = {"green": 0, "amber": 1, "red": 2}
     assert order[lenient.band] >= order[strict.band]
+
+
+def test_native_model_loads_from_gzip(tmp_path: Path) -> None:
+    """Published entries store the native model gzipped.
+
+    XGBoost's JSON dump is several megabytes uncompressed and compresses by
+    roughly an order of magnitude; it is committed once per version and lives
+    in git forever, so the uncompressed form is waste. Reasons must survive
+    the change.
+    """
+    import gzip
+
+    target = _publish(tmp_path, "0.1.0")
+    raw = (target / "model.json").read_bytes()
+    (target / "model.json.gz").write_bytes(gzip.compress(raw, 9))
+    (target / "model.json").unlink()
+
+    result = load("url-scorer-lexical", root=tmp_path).score("https://sbi-kyc-verify5.xyz/login")
+    assert result.reasons, "gzipped native model must still produce reasons"
+    assert len((target / "model.json.gz").read_bytes()) < len(raw)

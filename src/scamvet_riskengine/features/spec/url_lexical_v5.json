@@ -1,9 +1,9 @@
 {
-  "spec_version": "url_lexical_v4",
+  "spec_version": "url_lexical_v5",
   "created": "2026-07-23",
   "generator": "scamvet_riskengine.features.url:extract",
   "requires_network": false,
-  "note": "The contract for lexical URL features. Consumed by RiskEngine models, by Core's risk-scorer agent, and by ScamPulse's dbt models, which must emit columns matching these names and dtypes. Changing any field, or changing any data file under features/data/, requires a new spec_version - feature values must never drift under a fixed version. Feature values also depend on the pinned tldextract version, because public-suffix resolution determines subdomain and registered-domain boundaries. v3 removes had_scheme: it encoded corpus provenance rather than a property of the URL, and cannot carry the same meaning at inference time. v4 removes scheme_is_https for the same class of reason as v3 removed had_scheme: it encodes which upstream file a row came from rather than a property of the address, and here the learned direction is inverted relative to production.",
+  "note": "The contract for lexical URL features. Consumed by RiskEngine models, by Core's risk-scorer agent, and by ScamPulse's dbt models, which must emit columns matching these names and dtypes. Changing any field, or changing any data file under features/data/, requires a new spec_version - feature values must never drift under a fixed version. Feature values also depend on the pinned tldextract version, because public-suffix resolution determines subdomain and registered-domain boundaries. v3 removes had_scheme: it encoded corpus provenance rather than a property of the URL, and cannot carry the same meaning at inference time. v4 removes scheme_is_https for the same class of reason as v3 removed had_scheme: it encodes which upstream file a row came from rather than a property of the address, and here the learned direction is inverted relative to production. v5 measures whole-URL features on a canonical scheme-free form. The invariant is extract(u) == extract('https://' + u) for every field, enforced by a property test: any feature computed over the raw string inherits how that string happened to be stored.",
   "data_files": [
     "data/url_keywords_v1.json",
     "data/brands_v1.json",
@@ -24,7 +24,7 @@
       "min": 0,
       "max": null,
       "nullable": false,
-      "description": "Character length of the stripped raw input."
+      "description": "Character length of the canonical address: host, optional port, path, query and fragment, with the scheme stripped. Measured on the canonical form rather than the raw input so it cannot depend on whether the string was stored or pasted with a scheme."
     },
     {
       "name": "host_length",
@@ -160,7 +160,7 @@
       "min": 0,
       "max": null,
       "nullable": false,
-      "description": "Count of percent-encoded octets in the raw input."
+      "description": "Count of percent-encoded octets in the canonical address."
     },
     {
       "name": "host_digit_ratio",
@@ -176,7 +176,7 @@
       "min": 0.0,
       "max": 1.0,
       "nullable": false,
-      "description": "Fraction of raw-input characters that are digits."
+      "description": "Fraction of canonical-address characters that are digits."
     },
     {
       "name": "host_entropy",
@@ -291,7 +291,5 @@
       "description": "Minimum edit distance from the registered domain label to any brand token, reported only when below 4; anything at or above 4 is reported as the cap of 64. Values of 1-3 indicate typosquatting, 0 an exact token match, 64 no near match. The bound exists because larger distances carry no signal and computing them dominated extraction cost."
     }
   ],
-  "supersedes": "url_lexical_v3",
-  "superseded_by": "url_lexical_v5",
-  "superseded_reason": "url_length, url_digit_ratio and num_encoded_chars were measured on the raw input string, which includes the scheme. 72% of corpus rows carry no scheme while every real user pastes one, so the top-ranked feature shifted by eight characters between training and inference: bankofbaroda.com/ scored 0.018 and https://bankofbaroda.com/ scored 0.985. v5 measures them on a canonical, scheme-free form."
+  "supersedes": "url_lexical_v4"
 }

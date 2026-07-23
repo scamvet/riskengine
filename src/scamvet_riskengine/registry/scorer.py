@@ -106,6 +106,7 @@ class Scorer:
         self.directory = Path(directory)
         self.featurizer = LexicalFeaturizer.from_dict(manifest.featurizer)
         self._session = self._open_session()
+        self._booster: Any = None
 
     def _open_session(self) -> Any:
         try:
@@ -201,18 +202,44 @@ class Scorer:
         forced to ship a second artifact, and a verdict without reasons is
         degraded rather than broken.
         """
-        native = self.directory / "model.json"
-        if not native.is_file():
+        if self._booster is None:
+            self._booster = self._load_booster()
+        if self._booster is None:
             return None
         try:
             import xgboost as xgb
 
-            booster = xgb.Booster()
-            booster.load_model(str(native))
-            raw = np.asarray(booster.predict(xgb.DMatrix(X), pred_contribs=True), dtype=float)
+            raw = np.asarray(self._booster.predict(xgb.DMatrix(X), pred_contribs=True), dtype=float)
             return raw[:, :-1]
         except Exception:  # pragma: no cover - reasons are best-effort
             return None
+
+    def _load_booster(self) -> Any:
+        """Load the native model once, from gzip or plain JSON.
+
+        Stored gzipped: XGBoost's JSON dump is several megabytes uncompressed
+        and compresses by roughly an order of magnitude. It is committed once
+        per model version and lives in git forever, so the uncompressed form is
+        waste rather than a constraint worth respecting.
+        """
+        import gzip
+
+        for name, opener in (
+            (self.manifest.native_artifact + ".gz", lambda p: gzip.decompress(p.read_bytes())),
+            (self.manifest.native_artifact, lambda p: p.read_bytes()),
+        ):
+            path = self.directory / name
+            if not path.is_file():
+                continue
+            try:
+                import xgboost as xgb
+
+                booster = xgb.Booster()
+                booster.load_model(bytearray(opener(path)))
+                return booster
+            except Exception:  # pragma: no cover - reasons are best-effort
+                return None
+        return None
 
     def __repr__(self) -> str:
         return (

@@ -17,11 +17,13 @@ needs to know about this model is what its evaluation does not establish.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -117,6 +119,21 @@ calibrated probability.
 
 {threshold_table}
 
+## Known false positives on legitimate Indian domains
+
+The corpus contains almost no Indian sites - 0.26% of rows are `.in` - so the
+model has never seen a legitimate Indian bank, and no aggregate metric measured
+on a Western corpus can reveal what it does with one. The check below scores
+every `official_domains` entry in the brand list, which are sites this project
+itself asserts are real. **{n_flagged} of {n_checked} were flagged amber or red.**
+
+{sanity_table}
+
+Treat this as the honest ceiling on using the score alone. It is the concrete
+form of the transfer problem described above, and the direct reason ADR-006
+places deterministic facts and the reasoning layer above this model rather than
+behind it.
+
 ## Intended use and limits
 
 Intended: pre-verdict scoring inside ScamVet's layered stack, and offline
@@ -133,6 +150,48 @@ assessment, not an accusation.
 - Commit: {git_sha}
 - Splits grouped by registered domain; no eTLD+1 appears in more than one split
 """
+
+
+def _sanity_check(target: Path, vet: Thresholds) -> dict[str, Any]:
+    """Score the domains our own brand list asserts are legitimate.
+
+    This is the false-positive check that matters for this product. The corpus
+    contains almost no Indian sites - 0.26% of rows are .in - so the model has
+    never seen a legitimate Indian bank, and aggregate metrics measured on a
+    Western corpus cannot reveal what it does with one. The brand list's
+    official_domains are, by our own assertion, real. Anything flagged here is
+    a false positive on the exact population the product serves.
+    """
+    from scamvet_riskengine.explain.reasons import load_templates  # noqa: F401
+    from scamvet_riskengine.features.url import _brands  # noqa: PLC2701
+    from scamvet_riskengine.registry.scorer import build_scorer
+
+    urls = []
+    for brand in _brands()["brands"]:
+        for domain in brand["official_domains"]:
+            urls.append(f"https://{domain}/")
+    urls = sorted(set(urls))
+
+    scorer = build_scorer(target)
+    results = scorer.score_many(urls, use_case="vet")
+    flagged: list[dict[str, Any]] = [
+        {"url": r.url, "band": r.band, "probability": float(r.probability)}
+        for r in results
+        if r.band != "green"
+    ]
+    flagged.sort(key=lambda row: float(row["probability"]), reverse=True)
+    lines = ["| domain | band | probability |", "|---|---|---|"]
+    lines += [
+        f"| `{row['url']}` | {row['band']} | {row['probability']:.4f} |" for row in flagged[:15]
+    ]
+    if not flagged:
+        lines.append("| _none_ | | |")
+    return {
+        "n_checked": len(urls),
+        "n_flagged": len(flagged),
+        "flagged": flagged,
+        "table": "\n".join(lines),
+    }
 
 
 def _git_sha() -> str:
@@ -163,7 +222,7 @@ def main() -> int:
     phishing_mask = test["type"].isin(["benign", "phishing"]).to_numpy()
     y_phishing = (test["type"].to_numpy()[phishing_mask] == "phishing").astype(int)
 
-    print(f"[1/4] training across seeds {args.seeds}")
+    print(f"[1/5] training across seeds {args.seeds}")
     config = BoostedConfig(seed=args.seeds[0])
     overall_runs, phishing_runs = [], []
     model = calibrator = None
@@ -187,14 +246,22 @@ def main() -> int:
         raise SystemExit("no model was trained; --seeds must not be empty")
     print(f"      phishing R@FPR5% {phishing['recall_at_fpr_0.05'].format()}")
 
-    print("[2/4] exporting and verifying ONNX")
+    print("[2/5] exporting and verifying ONNX")
     target = args.registry / MODEL_NAME / args.version
     target.mkdir(parents=True, exist_ok=True)
     blob, export = export_and_verify(model, X["test"][:5000], path=target / "model.onnx")
     print(f"      {export.size_bytes / 1024:.1f} KB, parity {export.max_abs_parity_diff:.2e}")
-    model.get_booster().save_model(str(target / "model.json"))
+    native_json = target / "model.json"
+    model.get_booster().save_model(str(native_json))
+    native_bytes = native_json.read_bytes()
+    (target / "model.json.gz").write_bytes(gzip.compress(native_bytes, 9))
+    native_json.unlink()
+    print(
+        f"      native model {len(native_bytes) / 1024:.0f} KB -> "
+        f"{(target / 'model.json.gz').stat().st_size / 1024:.0f} KB gzipped"
+    )
 
-    print("[3/4] writing manifest")
+    print("[3/5] writing manifest")
     reference = phishing_runs[0]
     thresholds = {
         # Consumer verdict: precision-leaning, because a false red destroys
@@ -231,6 +298,7 @@ def main() -> int:
             "size_bytes": export.size_bytes,
             "parity_max_abs_diff": export.max_abs_parity_diff,
             "native_artifact": "model.json",
+            "native_artifact_gzipped": True,
         },
         calibration={"method": "platt", **calibrator.to_dict()},
         thresholds=thresholds,
@@ -246,7 +314,16 @@ def main() -> int:
     )
     manifest.write(target / "manifest.json")
 
-    print("[4/4] writing model card")
+    print("[4/5] checking known-legitimate domains")
+    sanity = _sanity_check(target, thresholds["vet"])
+    for row in sanity["flagged"][:5]:
+        print(f"      FLAGGED {row['band']:>5} p={row['probability']:.4f}  {row['url']}")
+    print(
+        f"      {sanity['n_flagged']} of {sanity['n_checked']} official brand domains "
+        f"flagged amber or red"
+    )
+
+    print("[5/5] writing model card")
     floor = headline = "not measured"
     if args.audit.is_file():
         audit = json.loads(args.audit.read_text())
@@ -281,6 +358,9 @@ def main() -> int:
         floor=floor,
         headline=headline,
         threshold_table=threshold_table,
+        sanity_table=sanity["table"],
+        n_flagged=sanity["n_flagged"],
+        n_checked=sanity["n_checked"],
         corpus=manifest.corpus,
         licence_row=manifest.corpus_licence_row,
         git_sha=manifest.git_sha,

@@ -12,6 +12,7 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=2048]
       - id: end-of-file-fixer
+        exclude: '^src/scamvet_riskengine/models/.*\.(json|gz|onnx)$'
       - id: trailing-whitespace
       - id: check-merge-conflict
       - id: check-yaml

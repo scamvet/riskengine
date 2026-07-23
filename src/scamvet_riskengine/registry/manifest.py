@@ -143,6 +143,16 @@ class Manifest:
     def artifact_name(self) -> str:
         return str(self.model.get("artifact", "model.onnx"))
 
+    @property
+    def native_artifact(self) -> str:
+        """The training-format model, needed for TreeSHAP reasons.
+
+        Optional: a deployment that only needs bands should not be forced to
+        ship a second artifact, and a verdict without reasons is degraded
+        rather than broken (ADR-008).
+        """
+        return str(self.model.get("native_artifact", "model.json"))
+
     def threshold_for(self, use_case: str) -> Thresholds:
         try:
             return self.thresholds[use_case]
