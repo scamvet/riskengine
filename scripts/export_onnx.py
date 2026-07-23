@@ -32,7 +32,7 @@ import pandas as pd
 
 from scamvet_riskengine.eval import metrics as m
 from scamvet_riskengine.models import build_calibrator
-from scamvet_riskengine.models.boosted import BoostedConfig, boosted_scores, build_lightgbm
+from scamvet_riskengine.models.boosted import BoostedConfig, boosted_scores, build_xgboost
 from scamvet_riskengine.models.onnx_export import SIZE_CAP_BYTES, ExportError, export_and_verify
 
 DEFAULT_FEATURES = Path("data/derived/url_features.parquet")
@@ -87,7 +87,7 @@ def main() -> int:
     rows: list[dict[str, Any]] = []
     for n_estimators, max_depth in CANDIDATES:
         config = BoostedConfig(n_estimators=n_estimators, max_depth=max_depth, seed=args.seed)
-        model = build_lightgbm(config, y["train"])
+        model = build_xgboost(config, y["train"])
         model.fit(X["train"], y["train"])
 
         calibrator = build_calibrator(args.calibration)

@@ -24,7 +24,7 @@ from scamvet_riskengine.explain import (
     verify_additivity,
 )
 from scamvet_riskengine.features.featurize import LexicalFeaturizer, extract_frame
-from scamvet_riskengine.models.boosted import BoostedConfig, build_lightgbm
+from scamvet_riskengine.models.boosted import BoostedConfig, build_lightgbm, build_xgboost
 
 BENIGN = [f"https://newsdaily{i}.com/articles/section/{i}/story" for i in range(120)]
 PHISH = [f"https://sbi-kyc-verify{i}.xyz/login/update/otp" for i in range(120)]
@@ -297,3 +297,20 @@ def test_every_flag_template_has_an_absent_form() -> None:
     }
     missing = [k for k in flag_keys if "en_absent" not in templates["templates"][k]]
     assert missing == [], f"flag templates without an absent reading: {missing}"
+
+
+def test_attributions_work_for_xgboost_too(fitted) -> None:
+    """XGBoost is the registry candidate; its contribution path differs.
+
+    LightGBM exposes pred_contrib on the sklearn wrapper, XGBoost only on the
+    underlying Booster, and XGBoost reconciles to about 2e-06 rather than
+    5e-15 because its contribution path is float32 internally.
+    """
+    _, X, names, y = fitted
+    model = build_xgboost(BoostedConfig(n_estimators=30, max_depth=4), y)
+    model.fit(X, y)
+    assert verify_additivity(model, X[:200]) < 1e-4
+    rows = explain_rows(model, X[:20], names)
+    assert any(rows)
+    known = set(load_templates()["templates"])
+    assert {r.template_key for row in rows for r in row} <= known

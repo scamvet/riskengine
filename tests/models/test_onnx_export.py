@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from scamvet_riskengine.models.boosted import BoostedConfig, build_lightgbm
+from scamvet_riskengine.models.boosted import BoostedConfig, build_lightgbm, build_xgboost
 
 onnx = pytest.importorskip("onnxmltools", reason="ONNX extra not installed")
 pytest.importorskip("onnxruntime", reason="ONNX extra not installed")
@@ -99,3 +99,41 @@ def test_result_serialises(fitted) -> None:
     payload = result.as_dict()
     assert payload["parity_ok"] is True
     assert payload["size_kb"] > 0
+
+
+# --------------------------------------------------------------------------
+# XGBoost is the registry candidate, so its export path is tested too
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def fitted_xgb() -> tuple[object, np.ndarray]:
+    rng = np.random.default_rng(2)
+    n, d = 4000, 12
+    X = rng.normal(size=(n, d)).astype(np.float32)
+    y = (X[:, 0] + 0.7 * X[:, 1] * X[:, 2] + rng.normal(0, 0.4, n) > 0.4).astype(int)
+    model = build_xgboost(BoostedConfig(n_estimators=30, max_depth=5), y)
+    model.fit(X, y)
+    return model, X
+
+
+def test_xgboost_export_matches_native(fitted_xgb) -> None:
+    model, X = fitted_xgb
+    _, result = export_and_verify(model, X[:800])
+    assert result.parity_ok
+    assert result.max_abs_parity_diff < PARITY_TOLERANCE
+
+
+def test_xgboost_probabilities_are_valid(fitted_xgb) -> None:
+    model, X = fitted_xgb
+    probs = onnx_probabilities(to_onnx(model, X.shape[1]), X[:500])
+    assert probs.shape == (500,)
+    assert probs.min() >= 0.0 and probs.max() <= 1.0
+
+
+def test_unsupported_model_is_rejected() -> None:
+    class NotATree:
+        pass
+
+    with pytest.raises(ExportError, match="no ONNX converter"):
+        to_onnx(NotATree(), 5)

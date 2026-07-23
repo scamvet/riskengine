@@ -1,7 +1,12 @@
 """Per-prediction and global feature attributions.
 
-Uses LightGBM's native ``pred_contrib=True``, which computes exact TreeSHAP
-values. Verified: contributions sum to the model's raw margin to within 5e-15.
+Uses each library's native exact-TreeSHAP path: LightGBM's
+``predict(pred_contrib=True)`` and XGBoost's ``Booster.predict(pred_contribs=True)``.
+Both are exact; they differ in arithmetic precision. LightGBM reconciles to the
+raw margin within about 5e-15, XGBoost within about 2e-06 because its
+contribution path is float32 internally. The default tolerance accommodates the
+looser of the two rather than silently passing a real divergence in the tighter
+one.
 
 This deliberately avoids the ``shap`` package. The numbers are identical - both
 implement TreeSHAP - but ``shap`` pulls in numba and llvmlite, which is a heavy
@@ -20,6 +25,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+
+
+#: Reconciliation tolerance. LightGBM achieves ~5e-15; XGBoost ~2e-06, because
+#: its contribution path is float32 internally. Set for the looser of the two,
+#: which is still four orders of magnitude tighter than any error that could
+#: change a reason.
+ADDITIVITY_TOLERANCE = 1e-4
 
 
 class ExplainError(ValueError):
@@ -86,8 +98,34 @@ class GlobalImportance:
         }
 
 
+def _raw_contributions(model: Any, X: np.ndarray) -> np.ndarray:
+    """Dispatch to the fitted library's native exact-TreeSHAP path."""
+    if hasattr(model, "get_booster"):  # XGBoost sklearn wrapper
+        import xgboost as xgb
+
+        booster = model.get_booster()
+        return np.asarray(booster.predict(xgb.DMatrix(X), pred_contribs=True), dtype=float)
+    if hasattr(model, "booster_"):  # LightGBM sklearn wrapper
+        return np.asarray(model.predict(X, pred_contrib=True), dtype=float)
+    raise ExplainError(
+        f"no known TreeSHAP path for {type(model).__name__}; expected a fitted "
+        "LightGBM or XGBoost classifier"
+    )
+
+
+def raw_margin(model: Any, X: np.ndarray) -> np.ndarray:
+    """The model's uncalibrated margin, for reconciling attributions."""
+    if hasattr(model, "get_booster"):
+        import xgboost as xgb
+
+        return np.asarray(
+            model.get_booster().predict(xgb.DMatrix(X), output_margin=True), dtype=float
+        ).ravel()
+    return np.asarray(model.predict(X, raw_score=True), dtype=float).ravel()
+
+
 def contributions(model: Any, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Exact TreeSHAP contributions for a fitted LightGBM classifier.
+    """Exact TreeSHAP contributions for a fitted LightGBM or XGBoost classifier.
 
     Returns:
         (values, base) where ``values`` has shape (n_samples, n_features) and
@@ -98,7 +136,7 @@ def contributions(model: Any, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         ExplainError: if the returned array is not the expected shape, which
             would mean the library changed its contract underneath us.
     """
-    raw = np.asarray(model.predict(X, pred_contrib=True), dtype=float)
+    raw = _raw_contributions(model, X)
     if raw.ndim != 2 or raw.shape[0] != X.shape[0]:
         raise ExplainError(f"unexpected contribution shape {raw.shape} for input {X.shape}")
     if raw.shape[1] != X.shape[1] + 1:
@@ -108,7 +146,7 @@ def contributions(model: Any, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return raw[:, :-1], raw[:, -1]
 
 
-def verify_additivity(model: Any, X: np.ndarray, tolerance: float = 1e-6) -> float:
+def verify_additivity(model: Any, X: np.ndarray, tolerance: float = ADDITIVITY_TOLERANCE) -> float:
     """Check that contributions reconcile to the model's own output.
 
     TreeSHAP's defining property is additivity. If it does not hold, the
@@ -120,7 +158,7 @@ def verify_additivity(model: Any, X: np.ndarray, tolerance: float = 1e-6) -> flo
         The maximum absolute reconciliation error.
     """
     values, base = contributions(model, X)
-    margin = np.asarray(model.predict(X, raw_score=True), dtype=float).ravel()
+    margin = raw_margin(model, X)
     error = float(np.max(np.abs(values.sum(axis=1) + base - margin)))
     if error > tolerance:
         raise ExplainError(

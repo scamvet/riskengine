@@ -83,14 +83,30 @@ class LexicalFeaturizer:
     """Encode raw lexical features into a numeric matrix.
 
     Args:
-        max_tld_vocab: how many distinct TLDs get their own column. The rest
-            fall into ``__other__``. Bounded because the tail is enormous and
+        max_tld_vocab: how many distinct TLDs get their own column when
+            ``use_tld_onehot`` is on. Bounded because the tail is enormous and
             mostly single-occurrence, and an unbounded vocabulary would make
             the matrix width depend on the training sample.
+        use_tld_onehot: whether to emit per-TLD columns at all. **Off by
+            default.** A provenance audit measured their contribution at 0.0075
+            phishing recall against a seed spread of 0.0176 - within noise -
+            while costing 52 of 86 matrix columns. They also carried a
+            collection artifact: ``.ca`` rows are 10.6% malicious against a
+            33.2% corpus rate, because the benign upstream (ISCX-URL-2016,
+            University of New Brunswick) is Canada-skewed, so the column
+            encoded which crawl a row came from. Dropping them is smaller,
+            faster and removes a contamination vector for no measurable loss.
+            ``suspicious_tld`` and ``tld_length`` remain and carry the semantic
+            part of the signal.
     """
 
-    def __init__(self, max_tld_vocab: int = DEFAULT_MAX_TLD_VOCAB) -> None:
+    def __init__(
+        self,
+        max_tld_vocab: int = DEFAULT_MAX_TLD_VOCAB,
+        use_tld_onehot: bool = False,
+    ) -> None:
         self.max_tld_vocab = int(max_tld_vocab)
+        self.use_tld_onehot = bool(use_tld_onehot)
         self.spec_version: str = FEATURE_SPEC_VERSION
         self.tld_vocabulary: list[str] = []
         self._numeric_columns: list[str] = []
@@ -105,6 +121,10 @@ class LexicalFeaturizer:
         self._numeric_columns = [
             f["name"] for f in spec["features"] if f["name"] != CATEGORICAL_COLUMN
         ]
+        if not self.use_tld_onehot:
+            self.tld_vocabulary = []
+            self._fitted = True
+            return self
         counts = Counter(value for value in frame[CATEGORICAL_COLUMN].astype(str) if value)
         # Sort by frequency then alphabetically, so ties break deterministically
         # and the same training data always yields the same column order.
@@ -119,6 +139,8 @@ class LexicalFeaturizer:
     def feature_columns(self) -> list[str]:
         """Ordered output columns. Stable across calls once fitted."""
         self._require_fitted()
+        if not self.use_tld_onehot:
+            return list(self._numeric_columns)
         one_hot = [f"tld_is_{t}" for t in self.tld_vocabulary]
         return [*self._numeric_columns, *one_hot, f"tld_is_{OTHER_TLD}", f"tld_is_{NO_TLD}"]
 
@@ -128,6 +150,8 @@ class LexicalFeaturizer:
         self._check_frame(frame)
 
         numeric = frame[self._numeric_columns].astype("float32")
+        if not self.use_tld_onehot:
+            return numeric.reset_index(drop=True)[self.feature_columns]
 
         tlds = frame[CATEGORICAL_COLUMN].astype(str)
         known = set(self.tld_vocabulary)
@@ -149,7 +173,11 @@ class LexicalFeaturizer:
         """Coverage statistics for a frame under the fitted vocabulary."""
         self._require_fitted()
         tlds = frame[CATEGORICAL_COLUMN].astype(str)
-        covered = tlds.isin(set(self.tld_vocabulary)).mean() if len(tlds) else 0.0
+        covered = (
+            float(tlds.isin(set(self.tld_vocabulary)).mean())
+            if len(tlds) and self.use_tld_onehot
+            else 0.0
+        )
         return FeaturizeReport(
             n_rows=len(frame),
             n_columns=len(self.feature_columns),
@@ -167,6 +195,7 @@ class LexicalFeaturizer:
             "class": "LexicalFeaturizer",
             "spec_version": self.spec_version,
             "max_tld_vocab": self.max_tld_vocab,
+            "use_tld_onehot": self.use_tld_onehot,
             "tld_vocabulary": list(self.tld_vocabulary),
             "numeric_columns": list(self._numeric_columns),
             "feature_columns": self.feature_columns,
@@ -182,7 +211,10 @@ class LexicalFeaturizer:
                 f"state was fitted under spec {state.get('spec_version')!r} but this "
                 f"build produces {FEATURE_SPEC_VERSION!r}; feature values would not match"
             )
-        instance = cls(max_tld_vocab=int(state["max_tld_vocab"]))
+        instance = cls(
+            max_tld_vocab=int(state["max_tld_vocab"]),
+            use_tld_onehot=bool(state.get("use_tld_onehot", True)),
+        )
         instance.tld_vocabulary = list(state["tld_vocabulary"])
         instance._numeric_columns = list(state["numeric_columns"])
         instance._fitted = True

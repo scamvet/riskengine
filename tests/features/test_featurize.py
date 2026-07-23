@@ -58,7 +58,7 @@ def test_extract_frame_handles_empty_input() -> None:
 
 
 def test_vocabulary_comes_only_from_fit_data(train_frame: pd.DataFrame) -> None:
-    f = LexicalFeaturizer().fit(train_frame)
+    f = LexicalFeaturizer(use_tld_onehot=True).fit(train_frame)
     assert "xyz" not in f.tld_vocabulary
     assert "top" not in f.tld_vocabulary
     assert set(f.tld_vocabulary) <= {"com", "in", "org"}
@@ -67,7 +67,7 @@ def test_vocabulary_comes_only_from_fit_data(train_frame: pd.DataFrame) -> None:
 def test_unseen_tld_goes_to_other_not_its_own_column(
     train_frame: pd.DataFrame, unseen_frame: pd.DataFrame
 ) -> None:
-    f = LexicalFeaturizer().fit(train_frame)
+    f = LexicalFeaturizer(use_tld_onehot=True).fit(train_frame)
     matrix = f.transform(unseen_frame)
     assert f"tld_is_{OTHER_TLD}" in matrix.columns
     assert not any(c.endswith("_xyz") for c in matrix.columns)
@@ -75,7 +75,7 @@ def test_unseen_tld_goes_to_other_not_its_own_column(
 
 
 def test_no_tld_is_distinct_from_unknown_tld(train_frame: pd.DataFrame) -> None:
-    f = LexicalFeaturizer().fit(train_frame)
+    f = LexicalFeaturizer(use_tld_onehot=True).fit(train_frame)
     matrix = f.transform(train_frame)
     ip_row = matrix.iloc[TRAIN_URLS.index("http://182.127.6.238/x")]
     assert ip_row[f"tld_is_{NO_TLD}"] == 1.0
@@ -85,7 +85,7 @@ def test_no_tld_is_distinct_from_unknown_tld(train_frame: pd.DataFrame) -> None:
 def test_transform_column_set_is_identical_across_frames(
     train_frame: pd.DataFrame, unseen_frame: pd.DataFrame
 ) -> None:
-    f = LexicalFeaturizer().fit(train_frame)
+    f = LexicalFeaturizer(use_tld_onehot=True).fit(train_frame)
     assert list(f.transform(train_frame).columns) == list(f.transform(unseen_frame).columns)
 
 
@@ -106,14 +106,14 @@ def test_no_categorical_column_survives(train_frame: pd.DataFrame) -> None:
 
 
 def test_one_hot_rows_sum_to_exactly_one(train_frame: pd.DataFrame) -> None:
-    f = LexicalFeaturizer().fit(train_frame)
+    f = LexicalFeaturizer(use_tld_onehot=True).fit(train_frame)
     matrix = f.transform(train_frame)
     one_hot = [c for c in matrix.columns if c.startswith("tld_is_")]
     assert (matrix[one_hot].sum(axis=1) == 1.0).all(), "TLD encoding must be exhaustive"
 
 
 def test_vocabulary_is_bounded(train_frame: pd.DataFrame) -> None:
-    f = LexicalFeaturizer(max_tld_vocab=2).fit(train_frame)
+    f = LexicalFeaturizer(max_tld_vocab=2, use_tld_onehot=True).fit(train_frame)
     assert len(f.tld_vocabulary) == 2
     assert len(f.feature_columns) == 34 + 2 + 2  # numeric + vocab + other + none
 
@@ -173,6 +173,48 @@ def test_frame_without_tld_column_raises() -> None:
 
 
 def test_report_gives_coverage(train_frame: pd.DataFrame, unseen_frame: pd.DataFrame) -> None:
-    f = LexicalFeaturizer().fit(train_frame)
+    f = LexicalFeaturizer(use_tld_onehot=True).fit(train_frame)
     assert f.report(train_frame).tld_coverage > 0.5
     assert f.report(unseen_frame).tld_coverage == 0.0
+
+
+# --------------------------------------------------------------------------
+# TLD one-hots are opt-in
+# --------------------------------------------------------------------------
+
+
+def test_one_hots_are_off_by_default(train_frame: pd.DataFrame) -> None:
+    """A provenance audit measured their contribution as within seed noise.
+
+    They cost 52 of 86 matrix columns and carried a collection artifact: .ca
+    rows are 10.6% malicious against a 33.2% corpus rate because the benign
+    upstream crawl is Canada-skewed. Off by default, opt-in preserved.
+    """
+    f = LexicalFeaturizer().fit(train_frame)
+    assert not any(c.startswith("tld_is_") for c in f.feature_columns)
+    assert f.tld_vocabulary == []
+
+
+def test_default_matrix_is_numeric_features_only(train_frame: pd.DataFrame) -> None:
+    f = LexicalFeaturizer().fit(train_frame)
+    matrix = f.transform(train_frame)
+    assert list(matrix.columns) == f.feature_columns
+    assert "tld" not in matrix.columns
+    assert (matrix.dtypes == np.float32).all()
+
+
+def test_opt_in_adds_the_one_hot_block(train_frame: pd.DataFrame) -> None:
+    plain = LexicalFeaturizer().fit(train_frame)
+    with_onehot = LexicalFeaturizer(use_tld_onehot=True).fit(train_frame)
+    assert len(with_onehot.feature_columns) > len(plain.feature_columns)
+    assert set(plain.feature_columns) < set(with_onehot.feature_columns)
+
+
+def test_state_round_trips_in_both_modes(train_frame: pd.DataFrame) -> None:
+    for flag in (False, True):
+        original = LexicalFeaturizer(use_tld_onehot=flag).fit(train_frame)
+        restored = LexicalFeaturizer.from_dict(original.to_dict())
+        assert restored.use_tld_onehot == flag
+        pd.testing.assert_frame_equal(
+            restored.transform(train_frame), original.transform(train_frame)
+        )

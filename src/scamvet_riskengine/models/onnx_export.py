@@ -67,7 +67,7 @@ class ExportResult:
 
 
 def to_onnx(model: Any, n_features: int) -> bytes:
-    """Convert a fitted LightGBM classifier to a serialised ONNX model.
+    """Convert a fitted LightGBM or XGBoost classifier to serialised ONNX.
 
     ``zipmap=False`` keeps the probability output as a plain tensor. With
     ZipMap enabled the output is a sequence of dictionaries, which is awkward
@@ -75,21 +75,30 @@ def to_onnx(model: Any, n_features: int) -> bytes:
     client needs to unpack on the offline path.
     """
     try:
-        from onnxmltools import convert_lightgbm
+        from onnxmltools import convert_lightgbm, convert_xgboost
         from onnxmltools.convert.common.data_types import FloatTensorType
     except ImportError as exc:  # pragma: no cover - optional extra
         raise ExportError(
             "ONNX export requires onnxmltools; install with pip install 'scamvet-riskengine[onnx]'"
         ) from exc
 
-    try:
-        onnx_model = convert_lightgbm(
-            model,
-            initial_types=[("input", FloatTensorType([None, n_features]))],
-            zipmap=False,
+    initial_types = [("input", FloatTensorType([None, n_features]))]
+    # zipmap is a LightGBM-converter option; convert_xgboost rejects the keyword
+    # outright. XGBoost's converter already emits a plain probability tensor.
+    if hasattr(model, "get_booster"):
+        converter, family, kwargs = convert_xgboost, "XGBoost", {}
+    elif hasattr(model, "booster_"):
+        converter, family, kwargs = convert_lightgbm, "LightGBM", {"zipmap": False}
+    else:
+        raise ExportError(
+            f"no ONNX converter for {type(model).__name__}; expected a fitted "
+            "LightGBM or XGBoost classifier"
         )
+
+    try:
+        onnx_model = converter(model, initial_types=initial_types, **kwargs)
     except Exception as exc:
-        raise ExportError(f"LightGBM to ONNX conversion failed: {exc}") from exc
+        raise ExportError(f"{family} to ONNX conversion failed: {exc}") from exc
     return onnx_model.SerializeToString()
 
 
@@ -106,10 +115,13 @@ def onnx_probabilities(blob: bytes, X: np.ndarray) -> np.ndarray:
     session = ort.InferenceSession(blob, providers=["CPUExecutionProvider"])
     input_name = session.get_inputs()[0].name
     outputs = session.run(None, {input_name: np.ascontiguousarray(X, dtype=np.float32)})
+    probabilities = np.asarray(outputs[1])
+    if probabilities.ndim == 1:  # some converters emit a flat positive-class vector
+        return probabilities
     # Output 0 is the predicted label, output 1 the probability tensor. The
     # runtime emits a benign shape warning about the label output; it does not
     # affect the probabilities, which are the only thing read here.
-    return np.asarray(outputs[1])[:, 1]
+    return probabilities[:, 1]
 
 
 def export_and_verify(
@@ -121,7 +133,7 @@ def export_and_verify(
     """Convert, verify against the native model, and optionally write to disk.
 
     Args:
-        model: fitted LightGBM classifier.
+        model: fitted LightGBM or XGBoost classifier.
         X_sample: rows to compare on. Use real feature rows, not random noise -
             a conversion bug in a rarely-taken tree branch will not show up on
             data that never reaches it.

@@ -31,7 +31,7 @@ from scamvet_riskengine.explain import (
     verify_additivity,
 )
 from scamvet_riskengine.models import build_calibrator
-from scamvet_riskengine.models.boosted import BoostedConfig, boosted_scores, build_lightgbm
+from scamvet_riskengine.models.boosted import BoostedConfig, boosted_scores, build_xgboost
 
 DEFAULT_FEATURES = Path("data/derived/url_features.parquet")
 DEFAULT_OUT = Path("data/derived")
@@ -93,7 +93,7 @@ def main() -> int:
     print(f"template coverage: all {len(names)} features mapped")
 
     config = BoostedConfig(seed=args.seed)
-    model = build_lightgbm(config, y["train"])
+    model = build_xgboost(config, y["train"])
     model.fit(X["train"], y["train"])
 
     error = verify_additivity(model, X["test"][:2000])

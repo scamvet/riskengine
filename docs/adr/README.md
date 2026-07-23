@@ -9,6 +9,7 @@ them. Use `adr-template.md` as the starting point.
 | 001 | Licensing & IP (AGPL + CLA + brand claims) | Accepted |
 | 002 | Product centering — Rescue wing is the hero | Accepted |
 | 003 | RiskEngine PyPI distribution name | Accepted |
+| 006 | Scorer architecture and corpus limits | Accepted |
 | 007 | Corpus licence posture — research vs product track | Accepted |
 | 009 | Frozen metric protocol | Accepted |
 | 010 | Live threat-intelligence feed posture | Accepted |
