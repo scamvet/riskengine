@@ -1,9 +1,9 @@
 {
-  "spec_version": "url_lexical_v3",
+  "spec_version": "url_lexical_v4",
   "created": "2026-07-23",
   "generator": "scamvet_riskengine.features.url:extract",
   "requires_network": false,
-  "note": "The contract for lexical URL features. Consumed by RiskEngine models, by Core's risk-scorer agent, and by ScamPulse's dbt models, which must emit columns matching these names and dtypes. Changing any field, or changing any data file under features/data/, requires a new spec_version - feature values must never drift under a fixed version. Feature values also depend on the pinned tldextract version, because public-suffix resolution determines subdomain and registered-domain boundaries. v3 removes had_scheme: it encoded corpus provenance rather than a property of the URL, and cannot carry the same meaning at inference time.",
+  "note": "The contract for lexical URL features. Consumed by RiskEngine models, by Core's risk-scorer agent, and by ScamPulse's dbt models, which must emit columns matching these names and dtypes. Changing any field, or changing any data file under features/data/, requires a new spec_version - feature values must never drift under a fixed version. Feature values also depend on the pinned tldextract version, because public-suffix resolution determines subdomain and registered-domain boundaries. v3 removes had_scheme: it encoded corpus provenance rather than a property of the URL, and cannot carry the same meaning at inference time. v4 removes scheme_is_https for the same class of reason as v3 removed had_scheme: it encodes which upstream file a row came from rather than a property of the address, and here the learned direction is inverted relative to production.",
   "data_files": [
     "data/url_keywords_v1.json",
     "data/brands_v1.json",
@@ -17,14 +17,6 @@
       "max": 1,
       "nullable": false,
       "description": "1 if the input parsed to a non-empty host, else 0 with all other fields neutral."
-    },
-    {
-      "name": "scheme_is_https",
-      "dtype": "int8",
-      "min": 0,
-      "max": 1,
-      "nullable": false,
-      "description": "1 if the resolved scheme is https."
     },
     {
       "name": "url_length",
@@ -299,7 +291,5 @@
       "description": "Minimum edit distance from the registered domain label to any brand token, reported only when below 4; anything at or above 4 is reported as the cap of 64. Values of 1-3 indicate typosquatting, 0 an exact token match, 64 no near match. The bound exists because larger distances carry no signal and computing them dominated extraction cost."
     }
   ],
-  "supersedes": "url_lexical_v2",
-  "superseded_by": "url_lexical_v4",
-  "superseded_reason": "scheme_is_https encoded a storage convention of the upstream corpus files, not a property of the sites: only 2.4% of rows carry an explicit https prefix and those are 87.5% malicious, against 0.46% https among benign rows. The learned direction is the inverse of production reality, where nearly every legitimate site is https. Removed in v4."
+  "supersedes": "url_lexical_v3"
 }

@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 
 import tldextract
 
-FEATURE_SPEC_VERSION = "url_lexical_v3"
+FEATURE_SPEC_VERSION = "url_lexical_v4"
 
 _DATA_DIR = Path(__file__).parent / "data"
 
@@ -44,6 +44,15 @@ BRAND_DISTANCE_CAP = 64
 # faster. The change in reported values is why the spec moved to v2.
 BRAND_DISTANCE_USEFUL_MAX = 4
 
+# Removed in v4: scheme_is_https. Only 2.4% of the corpus carries an explicit
+# https prefix, and those rows are 87.5% malicious - benign rows are 0.46%
+# https, defacement 0.00%. That is a storage convention of the upstream files,
+# not a property of the sites. Worse than a merely useless feature: in
+# production nearly every legitimate site is https, so a model taught
+# "https implies malicious" would flag the legitimate web. This corpus cannot
+# teach the correct relationship, so the feature is removed rather than kept
+# and hoped over.
+#
 # Removed in v3: had_scheme. Whether the stored string carried "http://" turned
 # out to identify which upstream file a corpus row came from - defacement rows
 # were 100% scheme-prefixed, benign rows 8% - so the model learned provenance
@@ -241,7 +250,6 @@ def _empty_features() -> dict[str, Any]:
     """Neutral feature dict used when the input cannot be parsed at all."""
     return {
         "parse_ok": 0,
-        "scheme_is_https": 0,
         "url_length": 0,
         "host_length": 0,
         "path_length": 0,
@@ -313,7 +321,6 @@ def extract(url: str) -> dict[str, Any]:
         return features
 
     features["parse_ok"] = 1
-    features["scheme_is_https"] = 1 if parts.scheme == "https" else 0
 
     path = parts.path or ""
     query = parts.query or ""

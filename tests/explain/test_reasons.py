@@ -241,28 +241,50 @@ def test_an_unset_flag_renders_its_absent_form(fitted) -> None:
     """A flag contributing negatively means its absence lowered risk.
 
     Rendering the positive phrasing would state something untrue about the
-    address - telling a user "the connection is not encrypted" about an https
-    URL. Found by inspecting real output before this reached anyone.
+    address. Found by reading real output, not by any metric.
     """
     _, X, names, _ = fitted
     row = X[0].copy()
-    row[names.index("scheme_is_https")] = 1.0
+    row[names.index("host_is_ip")] = 0.0
     values = np.zeros(len(names))
-    values[names.index("scheme_is_https")] = -2.0
+    values[names.index("host_is_ip")] = -2.0
     reason = build_reasons(values, row, names)[0]
-    assert reason.template_key == "no_https"
+    assert reason.template_key == "ip_address_host"
     assert reason.direction == "decreases"
-    assert render_english(reason) == "The connection is encrypted."
+    assert render_english(reason) == "The address uses a domain name rather than a raw IP number."
 
 
 def test_a_set_flag_renders_its_positive_form(fitted) -> None:
     _, X, names, _ = fitted
     row = X[0].copy()
-    row[names.index("scheme_is_https")] = 0.0
+    row[names.index("host_is_ip")] = 1.0
     values = np.zeros(len(names))
-    values[names.index("scheme_is_https")] = 2.0
+    values[names.index("host_is_ip")] = 2.0
     reason = build_reasons(values, row, names)[0]
-    assert render_english(reason) == "The connection is not encrypted."
+    assert (
+        render_english(reason) == "The address points at a raw IP number instead of a domain name."
+    )
+
+
+def test_continuous_templates_are_neutral() -> None:
+    """A positive attribution does not mean a high value.
+
+    Continuous templates once asserted direction - "the path is unusually
+    long" - and were rendered over a zero-length path. They are now neutral
+    noun phrases; Core composes the directional sentence from the direction
+    and magnitude that travel on the Reason.
+    """
+    templates = load_templates()
+    continuous = {
+        entry["template_key"]
+        for entry in templates["features"].values()
+        if entry["evidence_kind"] != "flag"
+    }
+    banned = ("unusually", "not encrypted", "does not")
+    for key in continuous:
+        text = templates["templates"][key]["en"].lower()
+        for word in banned:
+            assert word not in text, f"{key} still asserts a direction: {text!r}"
 
 
 def test_every_flag_template_has_an_absent_form() -> None:

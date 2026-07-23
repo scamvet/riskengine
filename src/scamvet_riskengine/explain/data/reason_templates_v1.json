@@ -1,7 +1,7 @@
 {
   "version": "1",
   "updated": "2026-07-23",
-  "note": "Maps feature columns to stable template keys. RiskEngine emits keys and evidence; Core renders the user-facing prose in English and Hindi from the same keys. A feature absent from this table cannot become a reason, which is deliberate: it makes it impossible for a raw column name like 'num_hyphens_host' to reach a user. Adding a feature requires adding its template here in the same change. The 'en' strings are a reference rendering so the package is usable standalone; Core's phrase table is authoritative for production copy. Flag-derived templates also carry an 'en_absent' reading: a flag can contribute negatively, meaning its absence lowered risk, and rendering the positive phrasing would assert something untrue about the address. A flag feature's 'asserted_when' records which raw value the main phrasing describes; it defaults to 1 but is 0 for scheme_is_https, had_scheme and parse_ok, where the value 1 is the safe state.",
+  "note": "Maps feature columns to stable template keys. RiskEngine emits keys and evidence; Core renders the user-facing prose in English and Hindi from the same keys. A feature absent from this table cannot become a reason, which is deliberate: it makes it impossible for a raw column name like 'num_hyphens_host' to reach a user. Adding a feature requires adding its template here in the same change. The 'en' strings are a reference rendering so the package is usable standalone; Core's phrase table is authoritative for production copy. Flag-derived templates also carry an 'en_absent' reading: a flag can contribute negatively, meaning its absence lowered risk, and rendering the positive phrasing would assert something untrue about the address. A flag feature's 'asserted_when' records which raw value the main phrasing describes; it defaults to 1 but is 0 for scheme_is_https, had_scheme and parse_ok, where the value 1 is the safe state. Templates for non-flag features are deliberately neutral noun phrases: a positive attribution means the observed value raised risk, not that the value is high, so asserting 'unusually long' over a zero-length path was simply false. Direction and magnitude travel on the Reason, and Core composes the directional sentence.",
   "groups": {
     "tld_reputation": {
       "prefix": "tld_is_",
@@ -53,11 +53,6 @@
     "has_double_slash_in_path": {
       "template_key": "malformed_path",
       "evidence_kind": "flag"
-    },
-    "scheme_is_https": {
-      "template_key": "no_https",
-      "evidence_kind": "flag",
-      "asserted_when": 0
     },
     "parse_ok": {
       "template_key": "unparseable",
@@ -165,7 +160,7 @@
       "en_absent": "The address does not mention a well-known brand."
     },
     "brand_lookalike": {
-      "en": "The domain is spelled almost like a well-known brand's domain.",
+      "en": "How closely the domain resembles a known brand's domain.",
       "severity": "high"
     },
     "suspicious_tld": {
@@ -174,7 +169,7 @@
       "en_absent": "The domain extension is not one commonly used by scam sites."
     },
     "tld_reputation": {
-      "en": "The domain extension is unusual for a legitimate site of this kind.",
+      "en": "The domain extension.",
       "severity": "low"
     },
     "url_shortener": {
@@ -210,7 +205,8 @@
     "no_https": {
       "en": "The connection is not encrypted.",
       "severity": "medium",
-      "en_absent": "The connection is encrypted."
+      "en_absent": "The connection is encrypted.",
+      "retired": "Unused since url_lexical_v4 removed scheme_is_https. Kept so historical reason payloads remain renderable."
     },
     "missing_scheme": {
       "en": "The address was written without http or https.",
@@ -224,79 +220,79 @@
       "en_absent": "This is a valid web address."
     },
     "hyphenated_domain": {
-      "en": "The domain contains several hyphens, common in imitation addresses.",
+      "en": "The number of hyphens in the domain.",
       "severity": "medium"
     },
     "many_subdomains": {
-      "en": "The address has many parts before the real domain, which can hide it.",
+      "en": "The number of parts before the real domain.",
       "severity": "medium"
     },
     "deep_path": {
-      "en": "The address has an unusually deep folder path.",
+      "en": "The depth of the folder path.",
       "severity": "low"
     },
     "many_parameters": {
-      "en": "The address carries an unusual number of parameters.",
+      "en": "The number of parameters in the address.",
       "severity": "low"
     },
     "encoded_characters": {
-      "en": "Parts of the address are encoded, which can disguise its content.",
+      "en": "The amount of encoding in the address.",
       "severity": "medium"
     },
     "login_keywords": {
-      "en": "The address contains sign-in or verification words.",
+      "en": "Sign-in or verification words in the address.",
       "severity": "medium"
     },
     "payment_keywords": {
-      "en": "The address contains payment or banking words.",
+      "en": "Payment or banking words in the address.",
       "severity": "medium"
     },
     "urgency_keywords": {
-      "en": "The address contains urgency words such as blocked or expiring.",
+      "en": "Urgency words in the address, such as blocked or expiring.",
       "severity": "medium"
     },
     "reward_keywords": {
-      "en": "The address contains prize or reward words.",
+      "en": "Prize or reward words in the address.",
       "severity": "medium"
     },
     "keyword_density": {
-      "en": "The address is packed with words typical of scam pages.",
+      "en": "The overall density of scam-typical words.",
       "severity": "medium"
     },
     "random_looking_host": {
-      "en": "The domain looks randomly generated rather than chosen.",
+      "en": "How random the domain name looks.",
       "severity": "medium"
     },
     "random_looking_path": {
-      "en": "The path looks randomly generated.",
+      "en": "How random the path looks.",
       "severity": "low"
     },
     "digits_in_host": {
-      "en": "The domain contains an unusual number of digits.",
+      "en": "The proportion of digits in the domain.",
       "severity": "low"
     },
     "digits_in_address": {
-      "en": "The address contains an unusual number of digits.",
+      "en": "The proportion of digits in the address.",
       "severity": "low"
     },
     "long_address": {
-      "en": "The address is unusually long.",
+      "en": "The overall length of the address.",
       "severity": "low"
     },
     "long_domain": {
-      "en": "The domain name is unusually long.",
+      "en": "The length of the domain name.",
       "severity": "low"
     },
     "long_path": {
-      "en": "The path after the domain is unusually long.",
+      "en": "The length of the path after the domain.",
       "severity": "low"
     },
     "long_query": {
-      "en": "The address carries an unusually long query string.",
+      "en": "The length of the query string.",
       "severity": "low"
     },
     "long_fragment": {
-      "en": "The address carries an unusually long fragment.",
+      "en": "The length of the fragment.",
       "severity": "low"
     }
   }

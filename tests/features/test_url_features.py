@@ -124,7 +124,6 @@ def test_malformed_port_does_not_raise() -> None:
 def test_plain_legitimate_url() -> None:
     f = extract("https://www.sbi.co.in/web/personal-banking")
     assert f["parse_ok"] == 1
-    assert f["scheme_is_https"] == 1
     assert f["tld"] == "in"
     assert f["host_is_ip"] == 0
     assert f["brand_in_host"] == 1
@@ -136,7 +135,6 @@ def test_brand_impersonation_is_flagged() -> None:
     assert f["brand_in_host"] == 1
     assert f["brand_domain_mismatch"] == 1
     assert f["suspicious_tld"] == 1
-    assert f["scheme_is_https"] == 0
     assert f["num_hyphens_host"] == 2
     assert f["keyword_hits_auth"] >= 3
 
