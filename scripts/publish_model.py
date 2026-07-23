@@ -203,6 +203,26 @@ def _git_sha() -> str:
         return "unknown"
 
 
+def _featurizer_env() -> dict[str, str]:
+    """The library versions that decide what a feature value means.
+
+    ``feature_spec_version`` pins our extraction logic. It does not pin
+    tldextract's bundled public-suffix snapshot, which decides where eTLD+1
+    boundaries fall - so num_subdomains, tld_length and brand_domain_mismatch
+    can move under an unchanged spec string when that wheel is upgraded.
+    Recorded so the drift is detectable rather than silent.
+    """
+    import platform
+
+    import tldextract
+
+    return {
+        "tldextract": tldextract.__version__,
+        "python": platform.python_version(),
+        "recorded": "captured-at-publish",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--features", type=Path, default=DEFAULT_FEATURES)
@@ -290,6 +310,7 @@ def main() -> int:
         git_sha=_git_sha(),
         feature_spec_version=FEATURE_SPEC_VERSION,
         featurizer=featurizer.to_dict(),
+        featurizer_env=_featurizer_env(),
         model={
             "family": "xgboost",
             "config": config.as_dict(),

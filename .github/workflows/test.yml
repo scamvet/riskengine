@@ -1,0 +1,54 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev,train]"
+      - run: pytest --cov=scamvet_riskengine --cov-report=term-missing
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - name: registry artifacts must ship in the wheel
+        run: |
+          unzip -l dist/*.whl > /tmp/wheel.txt
+          grep -q "url-scorer-lexical/0.1.0/model.onnx" /tmp/wheel.txt
+          grep -q "url-scorer-lexical/0.1.0/manifest.json" /tmp/wheel.txt
+          grep -q "url-scorer-lexical/0.1.0/model.json.gz" /tmp/wheel.txt
+
+  default-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build
+      - run: python -m build
+      - name: install with core dependencies only
+        run: pip install dist/*.whl
+      - name: the documented example must run on a default install
+        run: python scripts/smoke_default_install.py

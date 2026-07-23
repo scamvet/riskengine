@@ -97,7 +97,7 @@ def to_onnx(model: Any, n_features: int) -> bytes:
         from onnxmltools.convert.common.data_types import FloatTensorType
     except ImportError as exc:  # pragma: no cover - optional extra
         raise ExportError(
-            "ONNX export requires onnxmltools; install with pip install 'scamvet-riskengine[onnx]'"
+            "ONNX export requires onnxmltools; install with pip install 'scamvet-riskengine[train]'"
         ) from exc
 
     initial_types = [("input", FloatTensorType([None, n_features]))]
@@ -127,7 +127,7 @@ def onnx_probabilities(blob: bytes, X: np.ndarray) -> np.ndarray:
     except ImportError as exc:  # pragma: no cover - optional extra
         raise ExportError(
             "ONNX verification requires onnxruntime; install with "
-            "pip install 'scamvet-riskengine[onnx]'"
+            "pip install 'scamvet-riskengine'"
         ) from exc
 
     session = ort.InferenceSession(blob, providers=["CPUExecutionProvider"])

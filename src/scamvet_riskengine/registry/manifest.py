@@ -10,6 +10,14 @@ Two fields exist to make a whole class of mistake impossible rather than merely
 discouraged. ``track`` records whether a model came from the research side
 (non-commercially licensed corpora, per ADR-007) or the product side; the
 registry refuses to hand a research model to a product caller. And
+``featurizer_env`` records the library versions that decide what a feature
+value means. Our extraction logic is pinned by ``feature_spec_version``;
+tldextract's bundled public-suffix snapshot is not, and it decides where
+eTLD+1 boundaries fall - so num_subdomains, tld_length and
+brand_domain_mismatch can move under an unchanged spec string when that
+wheel is upgraded. Optional, because models published before the field
+existed must still load.
+
 ``feature_spec_version`` is checked at load, because four spec versions have
 already come and gone in this chapter and a v2-trained model fed v4 features
 would produce confident nonsense with nothing in any metric to reveal it.
@@ -131,6 +139,7 @@ class Manifest:
     thresholds: dict[str, Thresholds]
     metrics: dict[str, Any]
     featurizer: dict[str, Any] = field(default_factory=dict)
+    featurizer_env: dict[str, Any] = field(default_factory=dict)
     corpus: str = ""
     corpus_licence_row: str = ""
     trained_at: str = ""
@@ -173,6 +182,7 @@ class Manifest:
             "git_sha": self.git_sha,
             "feature_spec_version": self.feature_spec_version,
             "featurizer": self.featurizer,
+            "featurizer_env": self.featurizer_env,
             "model": self.model,
             "calibration": self.calibration,
             "thresholds": {k: v.as_dict() for k, v in self.thresholds.items()},

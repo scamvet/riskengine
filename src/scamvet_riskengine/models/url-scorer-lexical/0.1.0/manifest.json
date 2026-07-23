@@ -86,6 +86,11 @@
       "brand_min_distance"
     ]
   },
+  "featurizer_env": {
+    "tldextract": "5.3.1",
+    "python": "3.11.15",
+    "recorded": "backfilled-2026-07-23"
+  },
   "model": {
     "family": "xgboost",
     "config": {

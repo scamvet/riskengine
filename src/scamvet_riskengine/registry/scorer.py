@@ -49,7 +49,11 @@ class ScoreResult:
         reasons: ordered attributions, strongest first.
         uncertainty: 0 when the score sits far from any band boundary, rising
             to 1 at a boundary. Not a confidence interval.
-        flags: machine-readable caveats, e.g. ``unparseable_input``.
+        flags: machine-readable caveats, e.g. ``unparseable_input``,
+            ``enrichment_used``, ``explanations_unavailable``. The last means
+            the native model needed for TreeSHAP was absent, so ``reasons`` is
+            empty because it could not be computed - not because nothing was
+            found. Consumers must not read an empty ``reasons`` as evidence.
         use_case: which threshold set produced the band.
         model_name, model_version, feature_spec_version: provenance.
         requires_network: whether this scorer needed enrichment. False for the
@@ -113,7 +117,7 @@ class Scorer:
             import onnxruntime as ort
         except ImportError as exc:  # pragma: no cover - optional at build time
             raise ScorerError(
-                "scoring requires onnxruntime; install with pip install 'scamvet-riskengine[onnx]'"
+                "scoring requires onnxruntime; install with pip install 'scamvet-riskengine'"
             ) from exc
         artifact = self.directory / self.manifest.artifact_name
         if not artifact.is_file():
@@ -169,6 +173,8 @@ class Scorer:
                 flags.append("unparseable_input")
             if self.manifest.requires_network:
                 flags.append("enrichment_used")
+            if attributions is None:
+                flags.append("explanations_unavailable")
             results.append(
                 ScoreResult(
                     url=url,
