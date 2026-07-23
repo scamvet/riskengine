@@ -33,6 +33,11 @@ import numpy as np
 #: change a reason.
 ADDITIVITY_TOLERANCE = 1e-4
 
+#: Minimum active rows before a feature is ranked by conditional importance.
+#: A mean over a handful of observations is noise, and this ranking exists to
+#: surface real rare-but-sharp features, not to promote accidents.
+MIN_ACTIVE_FOR_RANKING = 30
+
 
 class ExplainError(ValueError):
     """Raised when attributions cannot be computed or do not reconcile."""
@@ -62,15 +67,28 @@ class GlobalImportance:
         )
         return pairs[:top] if top else pairs
 
-    def ranked_when_active(self, top: int | None = None) -> list[tuple[str, float, int]]:
+    def ranked_when_active(
+        self, top: int | None = None, min_active: int = MIN_ACTIVE_FOR_RANKING
+    ) -> list[tuple[str, float, int]]:
         """Features ranked by attribution among the rows where they are active.
 
         The ranking that matters for rare features. Frequency-weighted
         importance divides by every row, so a feature firing on 0.44% of the
         corpus looks negligible even when it dominates the rows it touches.
+
+        Features active in fewer than ``min_active`` rows are excluded. Without
+        that guard this ranking does the thing it was built to prevent: on a
+        20,000-row sample ``fragment_length`` placed second at 2.686 while
+        being active in two rows, which is a coin flip presented as a finding.
         """
         triples = sorted(
-            zip(self.feature_names, self.mean_abs_when_active, self.n_active, strict=True),
+            (
+                item
+                for item in zip(
+                    self.feature_names, self.mean_abs_when_active, self.n_active, strict=True
+                )
+                if item[2] >= min_active
+            ),
             key=lambda item: item[1],
             reverse=True,
         )
