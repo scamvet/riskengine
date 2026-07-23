@@ -76,26 +76,29 @@ def test_large_model_is_reported_as_not_fitting() -> None:
     over-cap candidates are flagged instead of failing the export.
     """
     rng = np.random.default_rng(1)
-    X = rng.normal(size=(8000, 60)).astype(np.float32)
+    X = rng.normal(size=(15000, 80)).astype(np.float32)
     # Noisy labels and light pruning, so the trees are genuinely bushy. With the
     # default min_child_weight the same nominal config prunes down under the cap.
-    y = (X[:, 0] + rng.normal(0, 0.9, 8000) > 0).astype(int)
-    model = build_xgboost(BoostedConfig(n_estimators=400, max_depth=8, min_child_weight=1.0), y)
+    y = (X[:, 0] + rng.normal(0, 0.9, 15000) > 0).astype(int)
+    model = build_xgboost(BoostedConfig(n_estimators=500, max_depth=9, min_child_weight=1.0), y)
     model.fit(X, y)
     _, result = export_and_verify(model, X[:200])
     assert not result.fits_size_cap, "a production-scale model should exceed the cap"
     assert result.parity_ok, "over-cap is a size verdict, not a correctness failure"
 
 
-def test_size_cap_is_one_megabyte() -> None:
-    """Pinned deliberately.
+def test_size_cap_admits_the_chosen_configuration() -> None:
+    """Pinned deliberately, because the cap is a product decision.
 
-    The cap is our own pre-commit setting, not a platform limit - GitHub's
-    per-file hard limit is 100 MB. At 500 KB it was costing 0.122 phishing
-    recall on the offline path, which is a product decision being made by a
-    lint rule. Changing it should be a decision, so it is a test.
+    It is our own pre-commit setting, not a platform limit - GitHub's per-file
+    hard limit is 100 MB. At 500 KB it was costing 0.122 phishing recall, which
+    is a product decision being made by a lint rule. It is now 2 MB, sized to
+    admit the 200 x 8 configuration at 1,819 KB: the last size where more trees
+    buy measurable recall across five seeds. Changing it should be a decision,
+    so it is a test.
     """
-    assert SIZE_CAP_BYTES == 1024 * 1024
+    assert SIZE_CAP_BYTES == 2 * 1024 * 1024
+    assert SIZE_CAP_BYTES > 1_819 * 1024, "must admit the 200x8 artifact"
 
 
 def test_export_writes_to_disk(fitted, tmp_path) -> None:

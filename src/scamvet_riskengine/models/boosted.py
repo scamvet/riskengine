@@ -34,18 +34,28 @@ class BoostedConfig:
     benchmark compares model families rather than tuning effort. Optuna search
     comes later, on top of a protocol that is already fixed.
 
-    ``n_estimators`` is 100 rather than 400 **for size, not quality**. At 400
-    the ONNX export is 877 KB, over the 500 KB committed-artifact cap, forcing
-    a separate smaller model for the offline path; at 100 it is 217 KB and one
-    model serves both paths. Measured across four seeds the two configurations
-    do not separate - the gap in mean phishing recall is roughly 0.0005 while
-    the seed spread is roughly 0.013 - so the smaller model is free, not
-    better. An earlier reading of a single seed suggested 400 was overfitting;
-    it was not, and that claim should not be revived without multi-seed
-    evidence (ADR-009, amendment of 2026-07-23).
+    ``n_estimators`` is 200: the last size where more trees buy measurable
+    recall. Phishing recall at FPR 5%, XGBoost on 34 features, five seeds:
+
+    ===========  =================  ==========
+    config       recall             ONNX
+    ===========  =================  ==========
+    100 x 8      0.7900 +/- 0.0181  936 KB
+    200 x 8      0.8253 +/- 0.0177  1,819 KB
+    400 x 8      0.8419 +/- 0.0083  3,320 KB
+    ===========  =================  ==========
+
+    100 to 200 separates (gap 0.0353 against a spread of 0.0181). 200 to 400
+    does not (gap 0.0166 against 0.0177), so 400 costs 82% more artifact and
+    twice the fit time for nothing provable. See ADR-009's amendment for why a
+    difference smaller than the seed spread is not a finding.
+
+    This value has moved twice on evidence, and an earlier single-seed reading
+    suggesting 400 overfits was wrong. Do not change it without a multi-seed
+    benchmark: ``scripts/benchmark.py --n-estimators N --seeds 42 1 7 13 21``.
     """
 
-    n_estimators: int = 100
+    n_estimators: int = 200
     learning_rate: float = 0.1
     max_depth: int = 8
     subsample: float = 0.9
