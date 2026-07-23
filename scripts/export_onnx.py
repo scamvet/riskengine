@@ -1,13 +1,21 @@
 #!/usr/bin/env python
-"""Find the offline scorer: the best model that fits the 500 KB commit cap.
+"""Find the shipping scorer: the best model that fits the committed-artifact cap.
 
     python scripts/export_onnx.py
 
-The production LightGBM exports to roughly 3.8 MB, almost eight times the
-repository's committed-artifact cap. An on-device model fetched at first use
-would break the offline guarantee on exactly the connection where it matters,
-so the shipped offline scorer is a deliberately smaller sibling and the recall
-it gives up is measured here rather than discovered in production.
+ScamVet ships **one** model, serving both the online and offline paths, so this
+script's job is to find the best configuration that fits the committed-artifact
+cap rather than to pick a weaker sibling for on-device use.
+
+That decision was made on evidence. At a 500 KB cap the best fitting model gave
+up 0.122 phishing recall - 14.4% relative - against the unconstrained one, and
+that loss would have fallen on users with poor connectivity, who in this market
+are disproportionately the people the product exists to protect. Splitting into
+online and offline models would also have meant two sets of thresholds, two
+model cards, two red-team runs, and - worst - divergent ``reasons[]`` for the
+same URL depending on connectivity, which undermines the one thing ScamVet
+claims to do better than anyone. The cap was a pre-commit setting we chose, not
+a platform limit, so it was raised to 1 MB instead.
 
 Every candidate is trained on train, calibrated on the calibration split, and
 scored on test - the same discipline as the benchmark. Reporting is phishing-
@@ -16,8 +24,8 @@ are easy for structural reasons.
 
 Outputs into ``data/derived/``:
 
-    onnx_sweep.json         every candidate with size, recall and parity
-    url_scorer_offline.onnx the chosen model
+    onnx_sweep.json     every candidate with size, recall and parity
+    url_scorer.onnx     the chosen model, used on both paths
 """
 
 from __future__ import annotations
@@ -39,15 +47,25 @@ DEFAULT_FEATURES = Path("data/derived/url_features.parquet")
 DEFAULT_OUT = Path("data/derived")
 META_COLUMNS = ["url", "type", "label", "group", "split"]
 
-#: Candidate sizes, from production scale down to something a phone can hold.
+#: Candidate sizes. Sampled finely just under the cap, because that is where
+#: the decision actually lives: XGBoost trees are roughly four times denser
+#: than LightGBM's at the same nominal config - depth-wise growth against
+#: leaf-wise capping - so small changes in depth move the artifact by hundreds
+#: of kilobytes.
 CANDIDATES = [
     (400, 8),
     (200, 8),
+    (150, 8),
+    (120, 8),
     (100, 8),
+    (200, 7),
+    (150, 7),
+    (100, 7),
+    (200, 6),
+    (150, 6),
     (100, 6),
     (60, 6),
     (40, 6),
-    (30, 5),
     (20, 4),
 ]
 
@@ -121,7 +139,7 @@ def main() -> int:
 
     fitting = [r for r in rows if r["export"]["fits_size_cap"]]
     if not fitting:
-        print("\nNo candidate fits the cap. The offline path needs a different approach.")
+        print("\nNo candidate fits the cap. Raise it or reduce the feature set.")
         return 1
 
     best = max(fitting, key=lambda r: r["phishing"]["recall_at_fpr"]["0.05"])
@@ -129,7 +147,7 @@ def main() -> int:
     cost = largest["phishing"]["recall_at_fpr"]["0.05"] - best["phishing"]["recall_at_fpr"]["0.05"]
 
     print(
-        f"\nchosen offline model: {best['n_estimators']} trees, depth {best['max_depth']}, "
+        f"\nchosen model: {best['n_estimators']} trees, depth {best['max_depth']}, "
         f"{best['export']['size_kb']} KB"
     )
     print(
@@ -137,12 +155,12 @@ def main() -> int:
         f"{largest['phishing']['recall_at_fpr']['0.05']:.4f} for the best unconstrained model"
     )
     print(
-        f"cost of fitting on device: {cost:.4f} recall "
+        f"cost of fitting under the cap: {cost:.4f} recall "
         f"({cost / largest['phishing']['recall_at_fpr']['0.05']:.1%} relative)"
     )
 
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "url_scorer_offline.onnx").write_bytes(best["_blob"])
+    (args.out / "url_scorer.onnx").write_bytes(best["_blob"])
     for row in rows:
         row.pop("_blob")
     (args.out / "onnx_sweep.json").write_text(
@@ -157,7 +175,7 @@ def main() -> int:
             indent=2,
         )
     )
-    print(f"wrote {args.out / 'url_scorer_offline.onnx'} and {args.out / 'onnx_sweep.json'}")
+    print(f"wrote {args.out / 'url_scorer.onnx'} and {args.out / 'onnx_sweep.json'}")
     return 0
 
 

@@ -52,7 +52,12 @@ HEADLINE = "recall_at_fpr_0.05"
 
 
 def _fit(
-    name: str, X_train: np.ndarray, y_train: np.ndarray, imbalance: str, seed: int
+    name: str,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    imbalance: str,
+    seed: int,
+    overrides: dict[str, int] | None = None,
 ) -> tuple[Callable[[np.ndarray], np.ndarray], dict[str, Any], float]:
     started = time.perf_counter()
     if name == "logistic":
@@ -63,7 +68,7 @@ def _fit(
         def score(X: np.ndarray) -> np.ndarray:
             return decision_scores(model, X)
     elif name in ("xgboost", "lightgbm"):
-        config = BoostedConfig(imbalance=imbalance, seed=seed)  # type: ignore[arg-type]
+        config = BoostedConfig(imbalance=imbalance, seed=seed, **(overrides or {}))  # type: ignore[arg-type]
         builder = build_xgboost if name == "xgboost" else build_lightgbm
         booster = builder(config, y_train)
         booster.fit(X_train, y_train)
@@ -89,6 +94,14 @@ def main() -> int:
         default=[42, 1, 7],
         help="At least 2. Reported figures are the mean and observed range.",
     )
+    parser.add_argument(
+        "--n-estimators",
+        type=int,
+        default=None,
+        help="Override the boosted default. Any claim that one size beats another "
+        "needs multi-seed evidence, which is what this flag exists to gather.",
+    )
+    parser.add_argument("--max-depth", type=int, default=None)
     args = parser.parse_args()
 
     if len(args.seeds) < 2:
@@ -106,14 +119,23 @@ def main() -> int:
 
     print(f"features {len(feature_columns)} | train {len(X['train']):,} | test {len(X['test']):,}")
     print(f"phishing view: {int(phishing_mask.sum()):,} rows, base rate {y_phishing.mean():.4f}")
-    print(f"calibration={args.calibration} imbalance={args.imbalance} seeds={args.seeds}\n")
+    overrides: dict[str, int] = {}
+    if args.n_estimators is not None:
+        overrides["n_estimators"] = args.n_estimators
+    if args.max_depth is not None:
+        overrides["max_depth"] = args.max_depth
+
+    print(f"calibration={args.calibration} imbalance={args.imbalance} seeds={args.seeds}")
+    print(f"boosted overrides: {overrides or 'none (config defaults)'}\n")
 
     results: dict[str, Any] = {}
     for name in args.models:
         overall_runs, phishing_runs, per_class_runs, fit_times = [], [], [], []
         config: dict[str, Any] = {}
         for seed in args.seeds:
-            score, config, fit_seconds = _fit(name, X["train"], y["train"], args.imbalance, seed)
+            score, config, fit_seconds = _fit(
+                name, X["train"], y["train"], args.imbalance, seed, overrides
+            )
             fit_times.append(fit_seconds)
             calibrator = build_calibrator(args.calibration)
             calibrator.fit(score(X["calibration"]), y["calibration"])
@@ -184,6 +206,7 @@ def main() -> int:
                 "calibration": args.calibration,
                 "imbalance": args.imbalance,
                 "seeds": args.seeds,
+                "boosted_overrides": overrides,
                 "n_features": len(feature_columns),
                 "split_sizes": {k: int(len(v)) for k, v in parts.items()},
                 "phishing_view_rows": int(phishing_mask.sum()),

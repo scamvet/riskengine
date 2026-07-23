@@ -69,14 +69,33 @@ def test_small_model_fits_the_commit_cap(fitted) -> None:
 
 
 def test_large_model_is_reported_as_not_fitting() -> None:
-    """The whole reason the offline scorer is a separate, smaller model."""
+    """The cap is enforced, and enforcement is reported rather than raised.
+
+    ScamVet ships one model on both paths, so the sweep picks the best config
+    that fits rather than falling back to a weaker sibling. That only works if
+    over-cap candidates are flagged instead of failing the export.
+    """
     rng = np.random.default_rng(1)
-    X = rng.normal(size=(6000, 60)).astype(np.float32)
-    y = (X[:, 0] + rng.normal(0, 0.5, 6000) > 0).astype(int)
-    model = build_lightgbm(BoostedConfig(n_estimators=400, max_depth=8), y)
+    X = rng.normal(size=(8000, 60)).astype(np.float32)
+    # Noisy labels and light pruning, so the trees are genuinely bushy. With the
+    # default min_child_weight the same nominal config prunes down under the cap.
+    y = (X[:, 0] + rng.normal(0, 0.9, 8000) > 0).astype(int)
+    model = build_xgboost(BoostedConfig(n_estimators=400, max_depth=8, min_child_weight=1.0), y)
     model.fit(X, y)
     _, result = export_and_verify(model, X[:200])
     assert not result.fits_size_cap, "a production-scale model should exceed the cap"
+    assert result.parity_ok, "over-cap is a size verdict, not a correctness failure"
+
+
+def test_size_cap_is_one_megabyte() -> None:
+    """Pinned deliberately.
+
+    The cap is our own pre-commit setting, not a platform limit - GitHub's
+    per-file hard limit is 100 MB. At 500 KB it was costing 0.122 phishing
+    recall on the offline path, which is a product decision being made by a
+    lint rule. Changing it should be a decision, so it is a test.
+    """
+    assert SIZE_CAP_BYTES == 1024 * 1024
 
 
 def test_export_writes_to_disk(fitted, tmp_path) -> None:
