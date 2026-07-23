@@ -14,6 +14,8 @@ registry serves, and is public so the benchmarks are reproducible rather than
 because consumers are expected to assemble a scorer by hand.
 """
 
+from importlib.metadata import PackageNotFoundError, version as _version
+
 from scamvet_riskengine.registry import (
     Manifest,
     ManifestError,
@@ -26,6 +28,11 @@ from scamvet_riskengine.registry import (
     resolve,
 )
 
+try:
+    __version__ = _version("scamvet-riskengine")
+except PackageNotFoundError:  # pragma: no cover - running from a source tree
+    __version__ = "0.0.0"
+
 __all__ = [
     "Manifest",
     "ManifestError",
@@ -33,6 +40,7 @@ __all__ = [
     "Scorer",
     "ScorerError",
     "Thresholds",
+    "__version__",
     "list_models",
     "load",
     "resolve",
